@@ -1,0 +1,211 @@
+#include "esp_camera.h"
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <Preferences.h>
+#include "USB.h"
+#include "USBHIDDigitizer.h"
+
+// --- Kamera Pins (Beispiel ESP32-S3 Cam) ---
+#define PWDN_GPIO_NUM  -1
+#define RESET_GPIO_NUM -1
+#define XCLK_GPIO_NUM  15
+#define SIOD_GPIO_NUM  4
+#define SIOC_GPIO_NUM  5
+#define Y2_GPIO_NUM    11
+#define Y3_GPIO_NUM    9
+#define Y4_GPIO_NUM    8
+#define Y5_GPIO_NUM    10
+#define Y6_GPIO_NUM    12
+#define Y7_GPIO_NUM    18
+#define Y8_GPIO_NUM    17
+#define Y9_GPIO_NUM    16
+#define VSYNC_GPIO_NUM 6
+#define HREF_GPIO_NUM  7
+#define PCLK_GPIO_NUM  13
+
+USBHIDDigitizer Digitizer;
+AsyncWebServer server(80);
+Preferences prefs;
+
+struct Point { double x, y; };
+Point camPoints[5];
+Point screenPoints[5];
+double H[9] = {1,0,0, 0,1,0, 0,0,1}; 
+int calibStep = -1;
+int screenW = 1920, screenH = 1080;
+int irThreshold = 240;
+int exposureValue = 10;
+
+// Matrix aus Flash laden
+void loadSettings() {
+    prefs.begin("whiteboard", true);
+    for(int i=0; i<8; i++) {
+        String key = "h" + String(i);
+        H[i] = prefs.getDouble(key.c_str(), H[i]);
+    }
+    irThreshold = prefs.getInt("thresh", 240);
+    exposureValue = prefs.getInt("exp", 10);
+    prefs.end();
+}
+
+// Matrix in Flash speichern
+void saveSettings() {
+    prefs.begin("whiteboard", false);
+    for(int i=0; i<8; i++) {
+        String key = "h" + String(i);
+        prefs.putDouble(key.c_str(), H[i]);
+    }
+    prefs.putInt("thresh", irThreshold);
+    prefs.putInt("exp", exposureValue);
+    prefs.end();
+}
+
+void calculateHomography() {
+    double a[8][8] = {0};
+    double b[8] = {0};
+    for (int i = 0; i < 4; i++) {
+        int idx = i * 2;
+        a[idx][0] = camPoints[i].x; a[idx][1] = camPoints[i].y; a[idx][2] = 1;
+        a[idx][6] = -camPoints[i].x * screenPoints[i].x; a[idx][7] = -camPoints[i].y * screenPoints[i].x;
+        b[idx] = screenPoints[i].x;
+        a[idx+1][3] = camPoints[i].x; a[idx+1][4] = camPoints[i].y; a[idx+1][5] = 1;
+        a[idx+1][6] = -camPoints[i].x * screenPoints[i].y; a[idx+1][7] = -camPoints[i].y * screenPoints[i].y;
+        b[idx+1] = screenPoints[i].y;
+    }
+    // Gauß-Elimination
+    for (int i = 0; i < 8; i++) {
+        for (int j = i + 1; j < 8; j++) {
+            double f = a[j][i] / a[i][i];
+            b[j] -= f * b[i];
+            for (int k = i; k < 8; k++) a[j][k] -= f * a[i][k];
+        }
+    }
+    for (int i = 7; i >= 0; i--) {
+        H[i] = b[i];
+        for (int j = i + 1; j < 8; j++) H[i] -= a[i][j] * H[j];
+        H[i] /= a[i][i];
+    }
+    H[8] = 1.0;
+    saveSettings();
+}
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Whiteboard Control</title>
+<style>
+  body { background:#222; color:#fff; font-family:sans-serif; text-align:center; padding:20px; }
+  .box { background:#333; padding:20px; border-radius:10px; margin-bottom:10px; }
+  button { padding:15px; background:#07f; color:#fff; border:none; border-radius:5px; cursor:pointer; }
+  #canvas { position:fixed; top:0; left:0; width:100%; height:100%; display:none; background:#000; z-index:100; }
+  input { width: 80%; }
+</style></head><body>
+  <div class="box">
+    <h2>Live Steuerung</h2>
+    <p>Threshold (IR Empfindlichkeit): <span id="tVal">240</span><br>
+    <input type="range" min="100" max="255" value="240" oninput="update('thresh', this.value)"></p>
+    <p>Belichtung (Kamera): <span id="eVal">10</span><br>
+    <input type="range" min="1" max="100" value="10" oninput="update('exp', this.value)"></p>
+    <button onclick="startCalib()">Neue Kalibrierung starten</button>
+  </div>
+  <canvas id="canvas"></canvas>
+<script>
+  let step = 0;
+  function update(type, val) {
+    document.getElementById(type[0]+'Val').innerText = val;
+    fetch(`/${type}?v=${val}`);
+  }
+  function startCalib() {
+    const cvs = document.getElementById('canvas');
+    cvs.style.display = 'block';
+    cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+    document.documentElement.requestFullscreen();
+    fetch(`/init?w=${cvs.width}&h=${cvs.height}`).then(() => runStep());
+  }
+  function runStep() {
+    const cvs = document.getElementById('canvas'); const ctx = cvs.getContext('2d');
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    const pts = [[20,20], [cvs.width-20,20], [cvs.width-20,cvs.height-20], [20,cvs.height-20], [cvs.width/2,cvs.height/2]];
+    if(step < 5) {
+      ctx.fillStyle='red'; ctx.beginPath(); ctx.arc(pts[step][0], pts[step][1], 20, 0, 7); ctx.fill();
+      let poll = setInterval(() => {
+        fetch('/status').then(r => r.text()).then(s => {
+          if(parseInt(s) > step) { clearInterval(poll); step++; runStep(); }
+        });
+      }, 500);
+    } else { document.getElementById('canvas').style.display='none'; step=0; document.exitFullscreen(); }
+  }
+</script></body></html>
+)rawliteral";
+
+void setup() {
+    loadSettings();
+    camera_config_t config;
+    config.ledc_channel = LEDC_CHANNEL_0; config.ledc_timer = LEDC_TIMER_0;
+    config.pin_d0 = Y2_GPIO_NUM; config.pin_d1 = Y3_GPIO_NUM; config.pin_d2 = Y4_GPIO_NUM;
+    config.pin_d3 = Y5_GPIO_NUM; config.pin_d4 = Y6_GPIO_NUM; config.pin_d5 = Y7_GPIO_NUM;
+    config.pin_d6 = Y8_GPIO_NUM; config.pin_d7 = Y9_GPIO_NUM; config.pin_xclk = XCLK_GPIO_NUM;
+    config.pin_pclk = PCLK_PCLK_GPIO_NUM; config.pin_vsync = VSYNC_GPIO_NUM;
+    config.pin_href = HREF_GPIO_NUM; config.pin_sscb_sda = SIOD_GPIO_NUM;
+    config.pin_sscb_scl = SIOC_GPIO_NUM; config.pin_pwdn = PWDN_GPIO_NUM;
+    config.pin_reset = RESET_GPIO_NUM; config.xclk_freq_hz = 20000000;
+    config.frame_size = FRAMESIZE_QVGA; config.pixel_format = PIXFORMAT_GRAYSCALE;
+    config.grab_mode = CAMERA_GRAB_LATEST; config.fb_count = 1;
+    esp_camera_init(&config);
+
+    sensor_t * s = esp_camera_sensor_get();
+    s->set_aec_value(s, exposureValue);
+
+    WiFi.softAP("Whiteboard-Setup", "");
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ request->send_P(200, "text/html", index_html); });
+    server.on("/init", HTTP_GET, [](AsyncWebServerRequest *request){
+        screenW = request->getParam("w")->value().toInt();
+        screenH = request->getParam("h")->value().toInt();
+        screenPoints[0]={20,20}; screenPoints[1]={double(screenW-20),20};
+        screenPoints[2]={double(screenW-20),double(screenH-20)}; 
+        screenPoints[3]={20,double(screenH-20)}; screenPoints[4]={double(screenW/2),double(screenH/2)};
+        calibStep = 0; request->send(200);
+    });
+    server.on("/thresh", HTTP_GET, [](AsyncWebServerRequest *request){
+        irThreshold = request->getParam("v")->value().toInt();
+        saveSettings(); request->send(200);
+    });
+    server.on("/exp", HTTP_GET, [](AsyncWebServerRequest *request){
+        exposureValue = request->getParam("v")->value().toInt();
+        sensor_t * s = esp_camera_sensor_get();
+        s->set_aec_value(s, exposureValue);
+        saveSettings(); request->send(200);
+    });
+    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(200, "text/plain", String(calibStep)); });
+    server.begin();
+
+    Digitizer.begin();
+    USB.begin();
+}
+
+void loop() {
+    camera_fb_t * fb = esp_camera_fb_get();
+    if (!fb) return;
+
+    int bx = -1, by = -1; uint8_t maxV = irThreshold;
+    for (int i = 0; i < fb->len; i++) {
+        if (fb->buf[i] > maxV) { maxV = fb->buf[i]; bx = i % fb->width; by = i / fb->width; }
+    }
+
+    if (bx != -1) {
+        if (calibStep >= 0 && calibStep < 5) {
+            camPoints[calibStep] = {(double)bx, (double)by};
+            calibStep++;
+            if (calibStep == 5) { calculateHomography(); calibStep = -1; }
+            delay(800); 
+        } else if (calibStep == -1) {
+            double z = H[6] * bx + H[7] * by + H[8];
+            double rx = (H[0] * bx + H[1] * by + H[2]) / z;
+            double ry = (H[3] * bx + H[4] * by + H[5]) / z;
+            Digitizer.press(constrain(map(rx, 0, screenW, 0, 32767), 0, 32767), 
+                            constrain(map(ry, 0, screenH, 0, 32767), 0, 32767));
+        }
+    } else {
+        Digitizer.release();
+    }
+    Digitizer.update();
+    esp_camera_fb_return(fb);
+}
