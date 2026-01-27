@@ -49,8 +49,8 @@ extern "C" {
 #define PCLK_GPIO_NUM  13
 
 /* -------------------- WLAN -------------------- */
-const char* STA_SSID = "Quezacotl_1986_2G4";
-const char* STA_PASS = "hacklqwertz";
+const char* STA_SSID = "**********";
+const char* STA_PASS = "**********";
 const char* AP_SSID  = "S3Eye_Whiteboard";
 const char* AP_PASS  = "12345678";
 
