@@ -7,6 +7,9 @@ The ESP32 also connects to your Wifi (add Wifi Credentials bevore compiling)
 Use the build in web gui to calibrate and make settings for your whiteboard.
 
 
+Partition: Huge (3Mb app no OTA/1mb spiffs)
+USB Mode: USB-OTG
+
 All Code was generated with Microsoft 365 Copilot, beacause i´m am very bad programmer ;-)
 
 Have fun
