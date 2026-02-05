@@ -1,6 +1,12 @@
 New Version,
-with; dfrobot SEN0158 IR Positioning Camera works much better now!
+with dfrobot SEN0158 IR Positioning Camera works much better now!
 Again all Code with Copilot.
+
+
+
+
+
+     
 
 
 
