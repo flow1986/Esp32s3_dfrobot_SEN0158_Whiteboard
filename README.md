@@ -1,3 +1,15 @@
+New Version,
+with; dfrobot SEN0158 IR Positioning Camera works much better now!
+Again all Code with Copilot.
+
+
+
+
+
+
+
+
+Old:
 ESP32 S3 Cam EYE Whiteboard:
 Use lens without IR FIlter on the OV2640 (Remove yourself, or buy a Lens with IR FIlter already removed)
 
