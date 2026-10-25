@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f1eb">
+  <title>IR Whiteboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f2f1eb;
+      --panel: #fffefa;
+      --ink: #202a2c;
+      --muted: #687477;
+      --line: #d8ddda;
+      --green: #176b58;
+      --green-soft: #d9eee5;
+      --coral: #d4543e;
+      --navy: #152326;
+      --plot-line: rgba(194, 223, 211, .13);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .topbar {
+      min-height: 76px; display: flex; align-items: center; justify-content: space-between;
+      gap: 18px; padding: 12px clamp(18px, 4vw, 58px); border-bottom: 1px solid var(--line);
+      background: rgba(255, 254, 250, .78);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark { width: 34px; height: 34px; border: 2px solid var(--green); border-radius: 50%; position: relative; }
+    .brand-mark::before, .brand-mark::after { content: ""; position: absolute; background: var(--coral); border-radius: 50%; }
+    .brand-mark::before { width: 7px; height: 7px; left: 5px; top: 6px; }
+    .brand-mark::after { width: 5px; height: 5px; right: 5px; bottom: 6px; }
+    h1 { font: 600 20px/1.1 Georgia, serif; margin: 0; }
+    .eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-top: 4px; }
+    .top-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 9px; }
+    .status-pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--muted); background: var(--panel); }
+    .lamp { width: 8px; height: 8px; border-radius: 50%; background: #a3adaa; }
+    .lamp.on { background: #238466; box-shadow: 0 0 0 3px #23846620; }
+    main { width: min(1440px, 100%); margin: 0 auto; padding: 30px clamp(16px, 4vw, 58px) 52px; }
+    .intro { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+    .intro h2 { font: 500 clamp(25px, 4vw, 38px)/1.1 Georgia, serif; margin: 0; }
+    .intro p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, .8fr); gap: 20px; align-items: start; }
+    .surface { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+    .surface-head { min-height: 54px; padding: 13px 17px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+    .surface-head h3 { margin: 0; font-size: 14px; font-weight: 700; }
+    .surface-head span { color: var(--muted); font-size: 12px; }
+    .plot-wrap { position: relative; background: var(--navy); padding: 14px; }
+    canvas { width: 100%; display: block; aspect-ratio: 4 / 3; max-height: 56vh; object-fit: contain; }
+    .plot-label { position: absolute; bottom: 21px; left: 22px; color: #c6d7d1; font: 11px/1.3 "Trebuchet MS", sans-serif; }
+    .plot-coords { position: absolute; right: 22px; bottom: 21px; color: #c6d7d1; font: 11px/1.3 ui-monospace, monospace; text-align: right; }
+    .calibration { padding: 17px; border-top: 1px solid var(--line); }
+    .calibration-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .calibration-copy strong { display: block; font-size: 13px; }
+    .calibration-copy span { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 5px; padding: 9px 12px; font-weight: 600; font-size: 12px; }
+    .button:hover { border-color: var(--green); }
+    .button.primary { background: var(--green); border-color: var(--green); color: white; }
+    .button.primary:hover { background: #105441; }
+    .button:disabled { opacity: .48; cursor: not-allowed; }
+    .side { display: grid; gap: 14px; }
+    .section { padding: 16px; }
+    .section h3 { font-size: 14px; margin: 0 0 13px; }
+    .section + .section { border-top: 1px solid var(--line); }
+    .control { margin-top: 13px; }
+    .control:first-of-type { margin-top: 0; }
+    .control label, .field-label { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 12px; font-weight: 600; }
+    .control output { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+    .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    input[type="number"], input[type="text"], input[type="password"] { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: white; color: var(--ink); }
+    input[type="range"] { accent-color: var(--green); width: 100%; }
+    .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 34px; font-size: 13px; }
+    .switch { appearance: none; width: 38px; height: 22px; border-radius: 20px; background: #c7ceca; position: relative; transition: background .16s ease; flex: 0 0 auto; }
+    .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: transform .16s ease; }
+    .switch:checked { background: var(--green); }
+    .switch:checked::after { transform: translateX(16px); }
+    .mode-control { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 5px; padding: 3px; background: #f2f3ef; }
+    .mode-control label { display: block; margin: 0; }
+    .mode-control input { position: absolute; opacity: 0; pointer-events: none; }
+    .mode-control span { display: block; padding: 8px; border-radius: 3px; color: var(--muted); text-align: center; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .mode-control input:checked + span { background: white; color: var(--green); box-shadow: 0 1px 4px #202a2c1c; }
+    .mode-hint { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .section-footer { margin-top: 14px; display: flex; justify-content: flex-end; }
+    .wifi-state { margin: -3px 0 13px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .wifi-fields { display: grid; gap: 8px; }
+    .toast { position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 16px); padding: 10px 15px; background: var(--navy); color: white; border-radius: 5px; opacity: 0; pointer-events: none; transition: .2s ease; font-size: 13px; z-index: 2; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      canvas { max-height: none; }
+    }
+    @media (max-width: 540px) {
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .top-status { justify-content: flex-start; }
+      main { padding-top: 22px; }
+      .intro { align-items: flex-start; flex-direction: column; }
+      .calibration-row { align-items: flex-start; flex-direction: column; }
+      .actions { width: 100%; }
+      .actions .button { flex: 1; }
+      .plot-wrap { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div><h1>IR Whiteboard</h1><div class="eyebrow">SEN0158 · USB Touch</div></div>
+    </div>
+    <div class="top-status" aria-live="polite">
+      <span class="status-pill"><i id="sensorLamp" class="lamp"></i><span id="sensorState">Sensor sucht</span></span>
+      <span class="status-pill"><i id="usbLamp" class="lamp"></i><span id="usbState">USB Touch aus</span></span>
+      <span class="status-pill"><i id="wifiLamp" class="lamp"></i><span id="wifiState">Access Point aktiv</span></span>
+    </div>
+  </header>
+  <main>
+    <div class="intro">
+      <div><h2>Projektionsfläche einrichten</h2><p>IR-Punkte live verfolgen und auf den Bildschirm kalibrieren.</p></div>
+      <button class="button" id="testButton" type="button">Eingabe testen</button>
+    </div>
+    <div class="grid">
+      <section class="surface" aria-labelledby="liveTitle">
+        <div class="surface-head"><h3 id="liveTitle">Sensor-Liveansicht</h3><span id="pointReadout">Warte auf IR-Punkt</span></div>
+        <div class="plot-wrap">
+          <canvas id="sensorCanvas" aria-label="Liveposition der vom IR-Sensor erkannten Punkte"></canvas>
+          <div class="plot-label">SEN0158 · Sichtfeld</div>
+          <div class="plot-coords" id="coordinates">X -- · Y --</div>
+        </div>
+        <div class="calibration">
+          <div class="calibration-row">
+            <div class="calibration-copy"><strong id="calibrationTitle">Kalibrierung</strong><span id="calibrationHint">Vier projizierte Ecken nacheinander antippen.</span></div>
+            <div class="actions">
+              <button class="button primary" id="captureButton" type="button">Kalibrieren</button>
+              <button class="button" id="resetButton" type="button">Zurücksetzen</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <aside class="surface side" aria-label="Geräteeinstellungen">
+        <section class="section">
+          <h3>Eingabe</h3>
+          <label class="switch-row" for="hidToggle"><span>USB-HID senden</span><input class="switch" id="hidToggle" type="checkbox"></label>
+          <div class="control">
+            <div class="field-label">Eingabemodus</div>
+            <div class="mode-control" role="radiogroup" aria-label="USB-Eingabemodus">
+              <label><input type="radio" name="inputMode" value="touch" checked><span>Touchscreen</span></label>
+              <label><input type="radio" name="inputMode" value="mouse"><span>Maus</span></label>
+            </div>
+            <p class="mode-hint" id="modeHint">Absolute Bildschirmposition, ideal fürs Whiteboard und Touch-Gesten des Betriebssystems.</p>
+          </div>
+          <div class="control" id="longPressControl"><label for="longPress">Rechtsklick ab <output id="longPressValue">650 ms</output></label><input id="longPress" type="range" min="350" max="2000" step="50"></div>
+          <div class="control">
+            <label for="screenWidth">Bildschirmauflösung</label>
+            <div class="input-row"><input id="screenWidth" type="number" min="320" max="16384" aria-label="Bildschirmbreite"><input id="screenHeight" type="number" min="240" max="16384" aria-label="Bildschirmhöhe"></div>
+          </div>
+          <div class="section-footer"><button class="button primary" id="saveButton" type="button">Einstellungen speichern</button></div>
+        </section>
+        <section class="section">
+          <h3>Signal</h3>
+          <div class="control"><label for="sensitivity">Sensorreichweite <output id="sensitivityValue">6</output></label><input id="sensitivity" type="range" min="1" max="6" step="1"></div>
+          <div class="control"><label for="minSize">Mindestgröße IR-Punkt <output id="minSizeValue">2</output></label><input id="minSize" type="range" min="0" max="15" step="1"></div>
+          <div class="control"><label for="alpha">Glättung <output id="alphaValue">0,35</output></label><input id="alpha" type="range" min="0.05" max="0.95" step="0.05"></div>
+          <label class="switch-row" for="smoothToggle"><span>Bewegung glätten</span><input class="switch" id="smoothToggle" type="checkbox"></label>
+        </section>
+        <section class="section">
+          <h3>WLAN verbinden</h3>
+          <p class="wifi-state" id="wifiDetails">Access Point IR-Whiteboard bleibt beim Verbinden verfügbar.</p>
+          <div class="wifi-fields">
+            <input id="ssid" type="text" autocomplete="username" placeholder="WLAN-Name">
+            <input id="password" type="password" autocomplete="new-password" placeholder="WLAN-Passwort">
+          </div>
+          <div class="section-footer"><button class="button" id="wifiButton" type="button">WLAN speichern</button></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const canvas = $('sensorCanvas');
+    const context = canvas.getContext('2d');
+    const targets = [[0.04, 0.04], [0.96, 0.04], [0.96, 0.96], [0.04, 0.96]];
+    let state = { blobs: [], point: { valid: false }, sensor: false, hid: false, calibrated: false };
+    let calibrationStep = -1;
+    let settings = {};
+    let toastTimer;
+
+    function notify(message) {
+      const toast = $('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+    }
+
+    async function request(path, method = 'GET', body) {
+      const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      if (!response.ok) throw new Error(await response.text());
+      return response;
+    }
+
+    function resizeCanvas() {
+      const bounds = canvas.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      canvas.width = Math.round(bounds.width * scale);
+      canvas.height = Math.round(bounds.height * scale);
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      draw();
+    }
+
+    function draw() {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      if (!width || !height) return;
+      context.clearRect(0, 0, width, height);
+      context.fillStyle = '#152326';
+      context.fillRect(0, 0, width, height);
+      context.strokeStyle = 'rgba(194,223,211,.13)';
+      context.lineWidth = 1;
+      for (let i = 1; i < 8; i++) {
+        const x = width * i / 8;
+        context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke();
+      }
+      for (let i = 1; i < 6; i++) {
+        const y = height * i / 6;
+        context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke();
+      }
+      context.strokeStyle = 'rgba(219,238,230,.55)';
+      context.setLineDash([5, 5]);
+      context.strokeRect(1, 1, width - 2, height - 2);
+      context.setLineDash([]);
+      for (const blob of state.blobs || []) {
+        if (!blob.valid) continue;
+        const x = blob.x * width;
+        const y = blob.y * height;
+        context.beginPath(); context.arc(x, y, 10, 0, Math.PI * 2);
+        context.fillStyle = '#ed745b'; context.fill();
+        context.beginPath(); context.arc(x, y, 18, 0, Math.PI * 2);
+        context.strokeStyle = 'rgba(237,116,91,.38)'; context.lineWidth = 2; context.stroke();
+      }
+      if (calibrationStep >= 0) {
+        const [x, y] = targets[calibrationStep];
+        context.strokeStyle = '#f1cf73'; context.lineWidth = 2;
+        context.beginPath(); context.arc(x * width, y * height, 12, 0, Math.PI * 2); context.stroke();
+        context.beginPath(); context.moveTo(x * width - 20, y * height); context.lineTo(x * width + 20, y * height); context.stroke();
+        context.beginPath(); context.moveTo(x * width, y * height - 20); context.lineTo(x * width, y * height + 20); context.stroke();
+      }
+    }
+
+    function renderStatus(data) {
+      state = { ...state, ...data };
+      $('sensorLamp').classList.toggle('on', !!state.sensor);
+      $('sensorState').textContent = state.sensor ? 'SEN0158 bereit' : 'Sensor nicht erreichbar';
+      $('usbLamp').classList.toggle('on', !!state.hid);
+      $('usbState').textContent = state.hid ? (state.mouseMode ? 'USB Maus aktiv' : 'USB Touch aktiv') : 'USB HID aus';
+      $('wifiLamp').classList.toggle('on', !!data.staConnected);
+      $('wifiState').textContent = data.staConnected ? 'WLAN verbunden' : 'Access Point aktiv';
+      if (data.staConnected) $('wifiDetails').textContent = `${data.staSsid || ''} · ${data.staIp || ''} · AP ${data.apIp || ''}`;
+      const point = state.point || {};
+      $('pointReadout').textContent = point.valid ? `IR-Punkt erkannt · Größe ${point.size}` : 'Warte auf IR-Punkt';
+      $('coordinates').textContent = point.valid ? `X ${Math.round((point.x || 0) * settings.screenWidth)} · Y ${Math.round((point.y || 0) * settings.screenHeight)}` : 'X -- · Y --';
+      $('calibrationTitle').textContent = state.calibrated ? 'Kalibrierung abgeschlossen' : 'Kalibrierung';
+      draw();
+    }
+
+    async function loadSettings() {
+      settings = await (await request('/api/config')).json();
+      $('screenWidth').value = settings.screenWidth;
+      $('screenHeight').value = settings.screenHeight;
+      $('minSize').value = settings.minBlobSize;
+      $('minSizeValue').value = settings.minBlobSize;
+      $('sensitivity').value = settings.sensitivity;
+      $('sensitivityValue').value = settings.sensitivity;
+      $('alpha').value = settings.alpha;
+      $('alphaValue').value = Number(settings.alpha).toLocaleString('de-DE', { minimumFractionDigits: 2 });
+      $('hidToggle').checked = settings.hid;
+      $('smoothToggle').checked = settings.smoothing;
+      document.querySelector(`input[name="inputMode"][value="${settings.mouseMode ? 'mouse' : 'touch'}"]`).checked = true;
+      $('longPress').value = settings.longPressMs;
+      $('longPressValue').value = `${settings.longPressMs} ms`;
+      $('ssid').value = settings.ssid || '';
+      $('longPressControl').hidden = !settings.mouseMode;
+      $('modeHint').textContent = settings.mouseMode
+        ? 'Relative Mausbewegung; kurzer Kontakt klickt, Bewegung zieht, langes Halten löst Rechtsklick aus.'
+        : 'Absolute Bildschirmposition, ideal fürs Whiteboard und Touch-Gesten des Betriebssystems.';
+    }
+
+    $('minSize').addEventListener('input', () => $('minSizeValue').value = $('minSize').value);
+    $('sensitivity').addEventListener('input', () => $('sensitivityValue').value = $('sensitivity').value);
+    $('longPress').addEventListener('input', () => $('longPressValue').value = `${$('longPress').value} ms`);
+    document.querySelectorAll('input[name="inputMode"]').forEach(input => input.addEventListener('change', () => {
+      const mouseMode = input.value === 'mouse';
+      $('longPressControl').hidden = !mouseMode;
+      $('modeHint').textContent = mouseMode
+        ? 'Relative Mauszeiger: kurzer Kontakt klickt, Bewegung zieht, langer Kontakt löst Rechtsklick aus.'
+        : 'Absolute Bildschirmposition, ideal fürs Whiteboard und Touch-Gesten des Betriebssystems.';
+    }));
+    $('alpha').addEventListener('input', () => $('alphaValue').value = Number($('alpha').value).toLocaleString('de-DE', { minimumFractionDigits: 2 }));
+    $('saveButton').addEventListener('click', async () => {
+      try {
+        const values = {
+          screenWidth: Number($('screenWidth').value), screenHeight: Number($('screenHeight').value),
+          minBlobSize: Number($('minSize').value), sensitivity: Number($('sensitivity').value), alpha: Number($('alpha').value),
+          hid: $('hidToggle').checked, smoothing: $('smoothToggle').checked,
+          mouseMode: document.querySelector('input[name="inputMode"]:checked').value === 'mouse',
+          longPressMs: Number($('longPress').value)
+        };
+        await request('/api/config', 'POST', values);
+        settings = { ...settings, ...values };
+        notify('Einstellungen gespeichert');
+      } catch (error) { notify(`Fehler: ${error.message}`); }
+    });
+
+    $('captureButton').addEventListener('click', async () => {
+      if (calibrationStep < 0) {
+        calibrationStep = 0;
+        $('captureButton').textContent = 'Ecke 1 erfassen';
+        $('calibrationHint').textContent = 'IR-Punkt auf Ecke 1 von 4 richten.';
+      }
+      if (!state.point?.valid) { notify('Kein IR-Punkt erkannt'); return; }
+      const [targetX, targetY] = targets[calibrationStep];
+      try {
+        await request('/api/calibrate', 'POST', { index: calibrationStep, targetX, targetY });
+        calibrationStep++;
+        if (calibrationStep >= targets.length) {
+          calibrationStep = -1;
+          const status = await (await request('/api/status')).json();
+          renderStatus(status);
+          notify(status.calibrated ? 'Kalibrierung gespeichert' : 'Kalibrierung unvollständig');
+        } else {
+          $('captureButton').textContent = `Ecke ${calibrationStep + 1} erfassen`;
+          $('calibrationHint').textContent = `IR-Punkt auf Ecke ${calibrationStep + 1} von 4 richten.`;
+          draw();
+        }
+      } catch (error) { notify(`Fehler: ${error.message}`); }
+    });
+
+    $('resetButton').addEventListener('click', async () => {
+      try {
+        await request('/api/calibration/reset', 'POST', {});
+        calibrationStep = -1;
+        $('captureButton').textContent = 'Kalibrieren';
+        $('calibrationHint').textContent = 'Vier projizierte Ecken nacheinander antippen.';
+        renderStatus({ calibrated: false });
+        notify('Kalibrierung zurückgesetzt');
+      } catch (error) { notify(`Fehler: ${error.message}`); }
+    });
+
+    $('testButton').addEventListener('click', async () => {
+      try { await request('/api/test', 'POST', {}); notify('Touch-Test gesendet'); }
+      catch (error) { notify(`Fehler: ${error.message}`); }
+    });
+
+    $('wifiButton').addEventListener('click', async () => {
+      try {
+        await request('/api/wifi', 'POST', { ssid: $('ssid').value.trim(), password: $('password').value });
+        $('password').value = '';
+        notify('WLAN-Verbindung wird aufgebaut');
+      } catch (error) { notify(`Fehler: ${error.message}`); }
+    });
+
+    const socket = new WebSocket(`ws://${location.hostname}:81/`);
+    socket.addEventListener('message', event => { try { renderStatus(JSON.parse(event.data)); } catch {} });
+    socket.addEventListener('close', () => setTimeout(() => location.reload(), 3000));
+    window.addEventListener('resize', resizeCanvas);
+    loadSettings().then(resizeCanvas).then(async () => renderStatus(await (await request('/api/status')).json())).catch(error => notify(error.message));
+  </script>
+</body>
+</html>

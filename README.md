@@ -1,33 +1,76 @@
-New Version,
-with dfrobot SEN0158 IR Positioning Camera works much better now!
-Again all Code with Copilot.
+# ESP32-S3 IR Whiteboard
 
+Neue PlatformIO-Firmware für das DFRobot SEN0158 IR-Positioning-Modul. Der Sensor verfolgt IR-LEDs und liefert bis zu vier Punktpositionen; er erzeugt **kein Videobild**. Die Weboberfläche zeigt deshalb Sensorpunkte, Kalibrierung und Verbindungsstatus live.
 
+## Funktionen
 
+- Native USB-HID-Touchscreen-Eingabe mit absoluter Position für Windows und Android.
+- Touchscreen-Modus ist Standard und verwendet absolute Bildschirmkoordinaten. IR-LED an = Touch gedrückt; LED aus = Touch losgelassen. Verschieben bei aktiver LED ergibt Drag-and-drop; Doppeltippen und langes Drücken sind Touch-Gesten des Host-Betriebssystems.
+- Optionaler USB-Mausmodus: kurzer Kontakt klickt, Bewegung bei aktivem IR-Punkt zieht, Doppelklick funktioniert über zwei Kontakte. Langes Halten löst nach einstellbarer Zeit einen Rechtsklick aus.
+- Vier-Punkt-Homographie zur Ausrichtung auf das projizierte Bild.
+- WLAN-Access-Point bleibt auch dann aktiv, wenn das Gerät zusätzlich einem vorhandenen WLAN beitritt.
+- Web-Liveansicht, Sensorstatus, Touch-Test und konfigurierbare Filter.
+- Einstellbare Bildschirmauflösung und persistente Konfiguration im ESP32-NVS.
 
+## Hardware und Pins
 
-     
+Zielboard: Waveshare ESP32-S3-Zero mit 4 MB Flash. Das Projekt enthält ein eigenes PlatformIO-Profil für genau dieses Ziel. Andere ESP32-S3-Boards brauchen ein passendes Boardprofil und eine Partitionstabelle für deren Flashgröße. Der USB-Anschluss muss native USB-OTG-Verbindung ermöglichen.
 
+| SEN0158 | ESP32-S3 |
+| --- | --- |
+| VCC | 3V3 (Modulversorgung nach DFRobot-Datenblatt prüfen) |
+| GND | GND |
+| SDA | GPIO 5 |
+| SCL | GPIO 6 |
 
+Die I2C-Adresse ist `0x58`, die Busgeschwindigkeit 100 kHz. IR-LED/Pen benötigt eine eigene passende Versorgung. Sensor und Projektionsfläche müssen sich im Sichtfeld befinden; direkte Sonne und andere starke IR-Quellen vermeiden. Das AP-Standardpasswort `whiteboard` ist für die Ersteinrichtung gedacht; ändere es vor einem Einsatz in gemeinsam genutzten Netzen.
 
+## Inbetriebnahme
 
+1. Installiere PlatformIO Core und Python 3.
+2. Baue Firmware, Dateisystem und Web-Flasher-Artefakte mit `bash scripts/build-release.sh`.
+3. Flash per ESP Web Tools über die Flasher-Seite in `docs/index.html` (gehostet über GitHub Pages) oder manuell mit den Dateien `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin` und `littlefs.bin`.
+4. Verbinde den Rechner/das Android-Gerät per USB-Datenkabel mit dem ESP32-S3. Der S3 muss native USB-OTG unterstützen; USB-UART-Adapter allein kann kein HID bereitstellen.
+5. Verbinde dich mit WLAN `IR-Whiteboard`, Passwort `whiteboard`, und öffne `http://192.168.4.1`.
+6. Stelle den IR-Sensor so auf, dass die gesamte Projektionsfläche sichtbar ist. Stelle im Webinterface die Bildschirmauflösung ein und erfasse die vier projizierten Ecken mit dem IR-Pen.
+7. Aktiviere „USB-Touch senden“ und prüfe die Eingabe über „Touch testen“.
 
+Der Access Point bleibt im AP+STA-Modus aktiv. Unter „WLAN verbinden“ gespeicherte Zugangsdaten verbinden das Gerät zusätzlich mit dem Heimnetz. Die IP-Adresse erscheint in der Statuszeile.
 
+## Konfiguration
 
+| Wert | Bedeutung |
+| --- | --- |
+| Bildschirmbreite/-höhe | Logische Touchscreen-Größe. Möglichst passend zur Auflösung des Projektors und der Windows-/Android-Anzeige setzen. |
+| Mindestgröße IR-Punkt | Verwirft kleinere SEN0158-Blobs. Höher reduziert Störungen, kann schwache oder weit entfernte LEDs verlieren. |
+| Sensorreichweite | SEN0158-Empfindlichkeitsstufe 1 bis 6. Stufe 6 ist am empfindlichsten und hilft bei größeren Abständen; geringere Stufen vermeiden Störungen bei nahen/starken IR-Punkten. |
+| Glättung | EMA-Anteil der neuen Position. Niedrig = ruhiger, aber mehr Verzögerung; hoch = direkter, aber unruhiger. |
+| Bewegung glätten | Schaltet den EMA-Filter ein/aus. |
+| USB-Touch senden | Aktiviert/deaktiviert Touch-Berichte, ohne Webkonfiguration abzuschalten. |
+| Eingabemodus | Touchscreen nutzt absolute Koordinaten; Mausmodus bewegt den relativen Cursor und bietet den konfigurierbaren Long-Press-Rechtsklick. |
+| Rechtsklick ab | Haltezeit im Mausmodus, bevor ein Rechtsklick ausgegeben wird (350-2000 ms). |
 
-Old:
-ESP32 S3 Cam EYE Whiteboard:
-Use lens without IR FIlter on the OV2640 (Remove yourself, or buy a Lens with IR FIlter already removed)
+Kalibrierung: die angezeigten vier Eckziele der Reihe nach mit dem IR-Pen markieren und jeweils „Ecke erfassen“ drücken. Bei großer Sensor-Beamer-Entfernung den Sensor mittig und möglichst parallel zur Projektionsfläche ausrichten. Die Sensorreichweite hängt von IR-LED-Leistung, Optik, Winkel und Umgebungslicht ab; eine feste Maximaldistanz kann nicht garantiert werden. Eine engere IR-Optik am Sensor und eine kräftige, fokussierte IR-LED am Pen verbessern üblicherweise die Reichweite. Nach Änderung von Sensorposition, Zoom oder Projektionsfläche neu kalibrieren.
 
+## Web-Flasher-Dateien
 
-Connect the ESP32 Via USB HID to your device (tested on windows and android).
-The ESP32 also connects to your Wifi (add Wifi Credentials bevore compiling)
-Use the build in web gui to calibrate and make settings for your whiteboard.
+Jeder Aufruf des Release-Build-Skripts aktualisiert die festen Dateien im Projekt-Root und erzeugt zusätzlich einen UTC-Zeitstempel-Satz (`*-YYYYMMDD-HHMMSS-UTC.bin`). Die verwendeten Flash-Adressen stehen in `docs/manifest.json`:
 
+| Datei | Adresse | Zweck |
+| --- | ---: | --- |
+| `bootloader.bin` | `0x0000` | ESP32-S3-Startloader |
+| `partitions.bin` | `0x8000` | Partitionstabelle (NVS, OTA-Slot, LittleFS) |
+| `boot_app0.bin` | `0xE000` | Arduino-OTA-Metadatenbereich |
+| `firmware.bin` | `0x10000` | Programmcode |
+| `littlefs.bin` | `0x300000` | Weboberfläche im LittleFS-Dateisystem (1 MB) |
 
-Partition: Huge (3Mb app no OTA/1mb spiffs)
-USB Mode: USB-OTG
+Für GitHub Pages muss die Veröffentlichungsquelle einmalig auf den Ordner `docs` des `main`-Branches gestellt werden. Die Web-Serial-Flasher-Seite erfordert Chrome/Edge über HTTPS und löscht beim Erstflashen den bestehenden Gerätespeicher.
 
-All Code was generated with Microsoft 365 Copilot, beacause i´m am very bad programmer ;-)
+## Build
 
-Have fun
+```sh
+python3 -m pip install --user platformio
+bash scripts/build-release.sh
+```
+
+Das Zielboard und die Pinbelegung werden in `platformio.ini` bzw. `src/main.cpp` festgelegt. Der frühere Arduino-Sketch im Projekt-Root und die Dateien unter `old_ESP32_cam/` bleiben als Referenz erhalten; gebaut wird ausschließlich `src/main.cpp`.

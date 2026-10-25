@@ -1,0 +1,17 @@
+{
+  "name": "IR Whiteboard SEN0158",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "https://raw.githubusercontent.com/flow1986/Esp32s3_dfrobot_SEN0158_Whiteboard/main/bootloader.bin", "offset": 0 },
+        { "path": "https://raw.githubusercontent.com/flow1986/Esp32s3_dfrobot_SEN0158_Whiteboard/main/partitions.bin", "offset": 32768 },
+        { "path": "https://raw.githubusercontent.com/flow1986/Esp32s3_dfrobot_SEN0158_Whiteboard/main/boot_app0.bin", "offset": 57344 },
+        { "path": "https://raw.githubusercontent.com/flow1986/Esp32s3_dfrobot_SEN0158_Whiteboard/main/firmware.bin", "offset": 65536 },
+        { "path": "https://raw.githubusercontent.com/flow1986/Esp32s3_dfrobot_SEN0158_Whiteboard/main/littlefs.bin", "offset": 3145728 }
+      ]
+    }
+  ]
+}
