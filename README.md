@@ -56,15 +56,15 @@ Kalibrierung: die angezeigten vier Eckziele der Reihe nach mit dem IR-Pen markie
 
 ## Flash-Dateien und Adressen
 
-Jeder Aufruf des Release-Build-Skripts überschreibt die fünf Dateien im Projekt-Root. Frühere zeitgestempelte Buildkopien werden entfernt; es bleibt nur der aktuellste Binärsatz erhalten.
+Jeder Aufruf des Release-Build-Skripts erzeugt im Projekt-Root fünf Dateien mit gemeinsamem UTC-Zeitstempel, zum Beispiel `firmware-20261025-130000-UTC.bin`. Statische Aliasdateien und frühere Builds werden entfernt; es bleibt nur der aktuellste, zeitlich erkennbare Binärsatz.
 
 | Datei | Adresse | Zweck |
 | --- | ---: | --- |
-| `bootloader.bin` | `0x0000` | ESP32-S3-Startloader |
-| `partitions.bin` | `0x8000` | Partitionstabelle (NVS, OTA-Slot, LittleFS) |
-| `boot_app0.bin` | `0xE000` | Arduino-OTA-Metadatenbereich |
-| `firmware.bin` | `0x10000` | Programmcode |
-| `littlefs.bin` | `0x300000` | Weboberfläche im LittleFS-Dateisystem (1 MB) |
+| `bootloader-<timestamp>.bin` | `0x0000` | ESP32-S3-Startloader |
+| `partitions-<timestamp>.bin` | `0x8000` | Partitionstabelle (NVS, OTA-Slot, LittleFS) |
+| `boot_app0-<timestamp>.bin` | `0xE000` | Arduino-OTA-Metadatenbereich |
+| `firmware-<timestamp>.bin` | `0x10000` | Programmcode |
+| `littlefs-<timestamp>.bin` | `0x300000` | Weboberfläche im LittleFS-Dateisystem (1 MB) |
 
 ## Build
 
