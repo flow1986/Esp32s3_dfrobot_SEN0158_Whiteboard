@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PIO="${PLATFORMIO:-$HOME/.local/bin/pio}"
 BUILD="$ROOT/.pio/build/waveshare-s3-zero"
 FRAMEWORK="$HOME/.platformio/packages/framework-arduinoespressif32"
-STAMP="$(date -u +%Y%m%d-%H%M%S-UTC)"
 
 cd "$ROOT"
 "$PIO" run -t buildfs
@@ -25,8 +24,12 @@ for name in bootloader partitions boot_app0 firmware littlefs; do
     printf 'Build-Artefakt fehlt: %s\n' "$source" >&2
     exit 1
   fi
-  cp "$source" "$ROOT/$name-$STAMP.bin"
   cp "$source" "$ROOT/$name.bin"
 done
 
-printf 'Build %s exportiert. Flash-Dateien liegen im Projekt-Root.\n' "$STAMP"
+find "$ROOT" -maxdepth 1 -type f \
+  \( -name 'bootloader-*-UTC.bin' -o -name 'partitions-*-UTC.bin' \
+  -o -name 'boot_app0-*-UTC.bin' -o -name 'firmware-*-UTC.bin' \
+  -o -name 'littlefs-*-UTC.bin' \) -delete
+
+printf 'Aktuelle Flash-Dateien wurden im Projekt-Root aktualisiert.\n'

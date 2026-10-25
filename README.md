@@ -56,7 +56,7 @@ Kalibrierung: die angezeigten vier Eckziele der Reihe nach mit dem IR-Pen markie
 
 ## Flash-Dateien und Adressen
 
-Jeder Aufruf des Release-Build-Skripts aktualisiert die festen Dateien im Projekt-Root und erzeugt zusätzlich einen UTC-Zeitstempel-Satz (`*-YYYYMMDD-HHMMSS-UTC.bin`).
+Jeder Aufruf des Release-Build-Skripts überschreibt die fünf Dateien im Projekt-Root. Frühere zeitgestempelte Buildkopien werden entfernt; es bleibt nur der aktuellste Binärsatz erhalten.
 
 | Datei | Adresse | Zweck |
 | --- | ---: | --- |
