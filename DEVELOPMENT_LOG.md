@@ -7,6 +7,7 @@ Stand 2026-10-25. Dieses Log hält die wichtigsten Entscheidungen fest, damit di
 - Sensor: DFRobot SEN0158 IR-Positioning-Modul, liest bis zu vier IR-Blobs per I2C; kein Kamerabild.
 - Offizielle Referenzen: https://wiki.dfrobot.com/sen0158/docs/20468 (Arduino-Init, Pointer `0x36`, 16-Byte-Read/Offsets), https://wiki.dfrobot.com/sen0158 (3.3/5 V, 0-3 m, Sichtwinkel/Pinout), https://github.com/DFRobot/I2C_Addresses (7-Bit-Adresse `0x58`).
 - Zielboard: Waveshare ESP32-S3-Zero, 4 MB Flash, native USB-OTG für HID.
+- USB ist Composite CDC + HID (`ARDUINO_USB_MODE=0`, `ARDUINO_USB_CDC_ON_BOOT=1`); serielle Startmeldungen über den nativen USB-COM-Port bei 115200 Baud.
 - SDA GPIO 5, SCL GPIO 6, I2C-Adresse `0x58`, Bus 100 kHz.
 - PlatformIO-Profil: `waveshare_s3_zero_4mb`, Plattform Espressif32 6.9.0, Arduino.
 - Build: `bash scripts/build-release.sh`; bettet `data/index.html` in die Firmware ein und hinterlässt ausschließlich vier gemeinsam zeitgestempelte Binärdateien im Projekt-Root. Statische Aliasdateien und ältere Zeitstempelsätze werden entfernt.

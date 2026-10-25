@@ -35,6 +35,7 @@ Quellen: [DFRobot SEN0158-Wiki und Arduino-Beispiel](https://wiki.dfrobot.com/se
 2. Erzeuge Firmware und Binärdateien mit `bash scripts/build-release.sh`. Die Weboberfläche wird beim Kompilieren in die Firmware eingebettet.
 3. Flash die vier Binärdateien manuell mit den unten angegebenen Adressen.
 4. Verbinde den Rechner/das Android-Gerät per USB-Datenkabel mit dem ESP32-S3. Der S3 muss native USB-OTG unterstützen; USB-UART-Adapter allein kann kein HID bereitstellen.
+	Unter Windows bleibt zusätzlich zum HID ein USB-CDC-COM-Port für die serielle Diagnose aktiv. Monitor auf 115200 Baud stellen und nach Reset neu verbinden.
 5. Verbinde dich mit dem WLAN `IR-Whiteboard` (Groß-/Kleinschreibung beachten), Passwort `whiteboard`, und öffne `http://192.168.4.1`.
 6. Stelle den IR-Sensor so auf, dass die gesamte Projektionsfläche sichtbar ist. Stelle im Webinterface die Bildschirmauflösung ein und erfasse die vier projizierten Ecken mit dem IR-Pen.
 7. Aktiviere „USB-Touch senden“ und prüfe die Eingabe über „Touch testen“.

@@ -657,8 +657,8 @@ void setup() {
   Wire.setTimeOut(25);
   sensorPresent = initializeSensor();
   setupWeb();
-  USB.begin();
   touchDevice.begin();
+  USB.begin();
   Serial.printf("IR Whiteboard ready: AP=%s IP=%s sensor=%s\n", kApSsid,
                 WiFi.softAPIP().toString().c_str(), sensorPresent ? "ok" : "not-found");
 }
