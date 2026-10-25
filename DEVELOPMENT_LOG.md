@@ -17,6 +17,7 @@ Stand 2026-10-25. Dieses Log hält die wichtigsten Entscheidungen fest, damit di
 - USB-HID-Touchscreen als Standardmodus und optionaler USB-Mausmodus.
 - IR-Punkt aktiv hält Touch; IR-Punktverlust gibt Touch frei. Mausmodus bietet Klick, Drag-and-drop und einstellbaren Long-Press-Rechtsklick.
 - Vier-Punkt-Homographie. Quell- und Zielpunkte, HID-Modus, Auflösung, Glättung, Blob-Mindestgröße, Empfindlichkeit, WLAN-Zugangsdaten und Long-Press-Zeit liegen im NVS.
+- Kalibrierung kann im Browser-Vollbild mit IR-Punkt + Enter/Button erfasst werden; HID wird währenddessen pausiert. Quell- und Zielmarker sind in den zwei Live-Canvases verschiebbar; beim Loslassen wird die Homographie neu berechnet und persistiert.
 - AP `IR-Whiteboard` mit Passwort `whiteboard` bleibt im AP+STA-Betrieb verfügbar; Web-UI unter `http://192.168.4.1`.
 - Liveansicht hat zwei Koordinatenräume: Sensorfeld mit IR-Blobs und Kalibrier-Viereck; Bildschirm-Rechteck mit Zielpunkten und transformierter HID-Position.
 - Kein Web-Flasher im Repository. Nur die fünf aktuellen Timestamp-Binärdateien und deren Flash-Offsets werden benötigt.

@@ -59,6 +59,8 @@
     canvas { width: 100%; display: block; aspect-ratio: 4 / 3; max-height: 56vh; object-fit: contain; }
     .plot-label { position: absolute; bottom: 21px; left: 22px; color: #c6d7d1; font: 11px/1.3 "Trebuchet MS", sans-serif; }
     .plot-coords { position: absolute; right: 22px; bottom: 21px; color: #c6d7d1; font: 11px/1.3 ui-monospace, monospace; text-align: right; }
+    canvas.calibratable { touch-action: none; cursor: grab; }
+    canvas.calibratable:active { cursor: grabbing; }
     .calibration { padding: 17px; border-top: 1px solid var(--line); }
     .calibration-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .calibration-copy strong { display: block; font-size: 13px; }
@@ -96,6 +98,22 @@
     .wifi-fields { display: grid; gap: 8px; }
     .toast { position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 16px); padding: 10px 15px; background: var(--navy); color: white; border-radius: 5px; opacity: 0; pointer-events: none; transition: .2s ease; font-size: 13px; z-index: 2; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .calibration-overlay { position: fixed; inset: 0; z-index: 20; overflow: hidden; background: #10191a; color: #fffefa; }
+    .calibration-overlay[hidden] { display: none; }
+    .calibration-target { position: absolute; left: 4%; top: 4%; width: 34px; height: 34px; transform: translate(-50%, -50%); border: 2px solid #f1cf73; border-radius: 50%; box-shadow: 0 0 0 8px #f1cf7330; pointer-events: none; }
+    .calibration-target::before, .calibration-target::after { content: ""; position: absolute; background: #f1cf73; }
+    .calibration-target::before { width: 58px; height: 1px; left: -14px; top: 14px; }
+    .calibration-target::after { width: 1px; height: 58px; left: 14px; top: -14px; }
+    .calibration-panel { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 28px)); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; color: var(--ink); background: #fffefa; border: 1px solid #ffffff55; border-radius: 6px; box-shadow: 0 8px 36px #0006; }
+    .calibration-panel strong { display: block; font-size: 14px; }
+    .calibration-panel p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .calibration-panel-actions { display: flex; flex: 0 0 auto; gap: 7px; }
+    .calibration-panel .button { white-space: nowrap; }
+    .calibration-corner { position: absolute; color: #c6d7d1; font: 12px ui-monospace, monospace; }
+    .calibration-corner.top-left { top: 5%; left: 5%; }
+    .calibration-corner.top-right { top: 5%; right: 5%; }
+    .calibration-corner.bottom-right { right: 5%; bottom: 5%; }
+    .calibration-corner.bottom-left { bottom: 5%; left: 5%; }
     @media (max-width: 860px) {
       .grid { grid-template-columns: 1fr; }
       canvas { max-height: none; }
@@ -138,7 +156,7 @@
         <div class="surface-head"><h3 id="liveTitle">Live-Positionen</h3><span id="pointReadout">Warte auf IR-Punkt</span></div>
         <div class="live-views">
           <div class="view-pane">
-            <div class="view-head"><span>Sensorraum</span><span>IR-Erkennung + Kalibrier-Viereck</span></div>
+            <div class="view-head"><span>Sensorraum</span><span>Quellpunkte ziehen zum Anpassen</span></div>
             <div class="plot-wrap">
               <canvas id="sensorCanvas" aria-label="Sensorraum mit erkannten Infrarotpunkten und Quellpunkten der Kalibrierung"></canvas>
               <div class="plot-label">SEN0158 · 1023 × 767</div>
@@ -146,7 +164,7 @@
             </div>
           </div>
           <div class="view-pane">
-            <div class="view-head"><span>Projektionsfläche</span><span id="screenResolutionReadout">1920 × 1080</span></div>
+            <div class="view-head"><span>Projektionsfläche</span><span id="screenResolutionReadout">Zielpunkte ziehen zum Anpassen</span></div>
             <div class="plot-wrap">
               <canvas id="screenCanvas" aria-label="Projektionsfläche mit transformierter Touchposition und Kalibrierzielen"></canvas>
               <div class="plot-label">HID-Ziel · Bildschirmkoordinaten</div>
@@ -158,7 +176,7 @@
           <div class="calibration-row">
             <div class="calibration-copy"><strong id="calibrationTitle">Kalibrierung</strong><span id="calibrationHint">Vier projizierte Ecken nacheinander antippen.</span></div>
             <div class="actions">
-              <button class="button primary" id="captureButton" type="button">Kalibrieren</button>
+              <button class="button primary" id="captureButton" type="button">Vollbild kalibrieren</button>
               <button class="button" id="resetButton" type="button">Zurücksetzen</button>
             </div>
           </div>
@@ -202,6 +220,20 @@
       </aside>
     </div>
   </main>
+  <div class="calibration-overlay" id="calibrationOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
+    <div class="calibration-panel">
+      <div><strong id="overlayTitle">Kalibrierung · Ecke 1 von 4</strong><p id="overlayHint">IR-Punkt auf das Ziel richten und „Ecke erfassen“ drücken oder Enter betätigen.</p></div>
+      <div class="calibration-panel-actions">
+        <button class="button primary" id="overlayCapture" type="button">Ecke erfassen</button>
+        <button class="button" id="overlayCancel" type="button">Beenden</button>
+      </div>
+    </div>
+    <div class="calibration-target" id="calibrationTarget" aria-hidden="true"></div>
+    <span class="calibration-corner top-left">1</span>
+    <span class="calibration-corner top-right">2</span>
+    <span class="calibration-corner bottom-right">3</span>
+    <span class="calibration-corner bottom-left">4</span>
+  </div>
   <div class="toast" id="toast" role="status"></div>
   <script>
     const $ = (id) => document.getElementById(id);
@@ -212,6 +244,9 @@
     const targets = [[0.04, 0.04], [0.96, 0.04], [0.96, 0.96], [0.04, 0.96]];
     let state = { blobs: [], point: { valid: false }, sensor: false, hid: false, calibrated: false };
     let calibrationStep = -1;
+    let calibrationActive = false;
+    let calibrationBusy = false;
+    let draggedCalibration = null;
     let settings = {};
     let toastTimer;
 
@@ -276,6 +311,23 @@
       context.fillText(String(index + 1), x, y + 0.5);
     }
 
+    function getScreenContentRect() {
+      const width = screenCanvas.clientWidth;
+      const height = screenCanvas.clientHeight;
+      const screenWidth = settings.screenWidth || state.screenWidth || 1920;
+      const screenHeight = settings.screenHeight || state.screenHeight || 1080;
+      const availableWidth = width - 36;
+      const availableHeight = height - 36;
+      const aspect = screenWidth / screenHeight;
+      let targetWidth = availableWidth;
+      let targetHeight = targetWidth / aspect;
+      if (targetHeight > availableHeight) {
+        targetHeight = availableHeight;
+        targetWidth = targetHeight * aspect;
+      }
+      return { left: (width - targetWidth) / 2, top: (height - targetHeight) / 2, width: targetWidth, height: targetHeight };
+    }
+
     function draw() {
       const sensorSize = drawGrid(sensorCanvas, sensorContext);
       const screenSize = drawGrid(screenCanvas, screenContext);
@@ -313,19 +365,8 @@
         if (point.valid) drawCalibrationMarker(sensorContext, point.sensorX * sensorSize.width, point.sensorY * sensorSize.height, index, '#f1cf73');
       }
 
-      const screenWidth = settings.screenWidth || state.screenWidth || 1920;
-      const screenHeight = settings.screenHeight || state.screenHeight || 1080;
-      const availableWidth = screenSize.width - 36;
-      const availableHeight = screenSize.height - 36;
-      const aspect = screenWidth / screenHeight;
-      let targetWidth = availableWidth;
-      let targetHeight = targetWidth / aspect;
-      if (targetHeight > availableHeight) {
-        targetHeight = availableHeight;
-        targetWidth = targetHeight * aspect;
-      }
-      const left = (screenSize.width - targetWidth) / 2;
-      const top = (screenSize.height - targetHeight) / 2;
+      const screenRect = getScreenContentRect();
+      const { left, top, width: targetWidth, height: targetHeight } = screenRect;
       screenContext.fillStyle = '#f2f1eb';
       screenContext.fillRect(left, top, targetWidth, targetHeight);
       screenContext.save();
@@ -372,6 +413,137 @@
       }
     }
 
+    function updateCalibrationOverlay() {
+      const [x, y] = targets[calibrationStep];
+      $('calibrationTarget').style.left = `${x * 100}%`;
+      $('calibrationTarget').style.top = `${y * 100}%`;
+      $('overlayTitle').textContent = `Kalibrierung · Ecke ${calibrationStep + 1} von 4`;
+      $('overlayHint').textContent = state.point?.valid
+        ? 'IR-Punkt ausgerichtet. Zum Speichern auf „Ecke erfassen“ klicken oder Enter drücken.'
+        : 'IR-Punkt auf das Ziel richten. Auf „Ecke erfassen“ klicken oder Enter drücken.';
+      $('overlayCapture').textContent = `Ecke ${calibrationStep + 1} erfassen`;
+    }
+
+    async function startCalibration() {
+      if (!state.sensor) { notify('SEN0158 ist nicht erreichbar'); return; }
+      calibrationStep = 0;
+      calibrationActive = true;
+      $('calibrationOverlay').hidden = false;
+      document.body.classList.add('calibrating');
+      updateCalibrationOverlay();
+      const fullscreenRequest = $('calibrationOverlay').requestFullscreen?.();
+      try {
+        await request('/api/calibration/mode', 'POST', { active: true });
+        notify('HID pausiert. Kalibrierung läuft im Vollbild.');
+      } catch (error) {
+        calibrationActive = false;
+        $('calibrationOverlay').hidden = true;
+        document.body.classList.remove('calibrating');
+        notify(`Kalibrierung konnte nicht gestartet werden: ${error.message}`);
+        return;
+      }
+      if (fullscreenRequest) {
+        try { await fullscreenRequest; }
+        catch { notify('Browser-Vollbild nicht verfügbar; Kalibrierung läuft im Fenster.'); }
+      }
+    }
+
+    async function stopCalibration() {
+      if (!calibrationActive) return;
+      calibrationActive = false;
+      calibrationStep = -1;
+      $('calibrationOverlay').hidden = true;
+      document.body.classList.remove('calibrating');
+      if (document.fullscreenElement === $('calibrationOverlay')) {
+        try { await document.exitFullscreen(); } catch {}
+      }
+      try { await request('/api/calibration/mode', 'POST', { active: false }); }
+      catch (error) { notify(`HID-Pause konnte nicht beendet werden: ${error.message}`); }
+      $('calibrationHint').textContent = 'Vier projizierte Ecken nacheinander erfassen. Marker in den Vorschauen lassen sich ziehen.';
+      $('captureButton').textContent = 'Vollbild kalibrieren';
+    }
+
+    async function captureCalibrationPoint() {
+      if (!calibrationActive || calibrationBusy) return;
+      if (!state.point?.valid) { notify('Kein IR-Punkt erkannt'); return; }
+      calibrationBusy = true;
+      const [targetX, targetY] = targets[calibrationStep];
+      try {
+        await request('/api/calibrate', 'POST', { index: calibrationStep, targetX, targetY });
+        const status = await (await request('/api/status')).json();
+        renderStatus(status);
+        calibrationStep++;
+        if (calibrationStep >= targets.length) {
+          await stopCalibration();
+          notify(status.calibrated ? 'Vier-Punkt-Homographie gespeichert' : 'Punkte gespeichert, Homographie ungültig');
+        } else {
+          updateCalibrationOverlay();
+          draw();
+        }
+      } catch (error) { notify(`Ecke konnte nicht gespeichert werden: ${error.message}`); }
+      finally { calibrationBusy = false; }
+    }
+
+    function findCalibrationHandle(canvas, clientX, clientY) {
+      const calibration = state.calibration || [];
+      const bounds = canvas.getBoundingClientRect();
+      const x = clientX - bounds.left;
+      const y = clientY - bounds.top;
+      const screenRect = canvas === screenCanvas ? getScreenContentRect() : null;
+      let nearest = null;
+      for (let index = 0; index < calibration.length; index++) {
+        const point = calibration[index];
+        if (!point.valid) continue;
+        const markerX = canvas === sensorCanvas ? point.sensorX * bounds.width : screenRect.left + point.targetX * screenRect.width;
+        const markerY = canvas === sensorCanvas ? point.sensorY * bounds.height : screenRect.top + point.targetY * screenRect.height;
+        const distance = Math.hypot(x - markerX, y - markerY);
+        if (distance <= 22 && (!nearest || distance < nearest.distance)) nearest = { index, distance };
+      }
+      return nearest;
+    }
+
+    function beginCalibrationDrag(event) {
+      if (state.calibrationMask !== 0x0F) return;
+      const canvas = event.currentTarget;
+      const handle = findCalibrationHandle(canvas, event.clientX, event.clientY);
+      if (!handle) return;
+      event.preventDefault();
+      canvas.setPointerCapture(event.pointerId);
+      draggedCalibration = { index: handle.index, kind: canvas === sensorCanvas ? 'sensor' : 'target', canvas, pointerId: event.pointerId };
+    }
+
+    function moveCalibrationDrag(event) {
+      if (!draggedCalibration || draggedCalibration.pointerId !== event.pointerId) return;
+      const bounds = draggedCalibration.canvas.getBoundingClientRect();
+      const point = state.calibration[draggedCalibration.index];
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top;
+      if (draggedCalibration.kind === 'sensor') {
+        point.sensorX = Math.max(0, Math.min(1, x / bounds.width));
+        point.sensorY = Math.max(0, Math.min(1, y / bounds.height));
+      } else {
+        const rect = getScreenContentRect();
+        point.targetX = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+        point.targetY = Math.max(0, Math.min(1, (y - rect.top) / rect.height));
+      }
+      draw();
+    }
+
+    async function finishCalibrationDrag(event) {
+      if (!draggedCalibration || draggedCalibration.pointerId !== event.pointerId) return;
+      const { index } = draggedCalibration;
+      draggedCalibration = null;
+      const point = state.calibration[index];
+      try {
+        await request('/api/calibration/point', 'POST', { index, sensorX: point.sensorX, sensorY: point.sensorY, targetX: point.targetX, targetY: point.targetY });
+        renderStatus(await (await request('/api/status')).json());
+        notify('Kalibrierpunkt und Homographie gespeichert');
+      } catch (error) {
+        renderStatus(await (await request('/api/status')).json());
+        notify(`Kalibrierpunkt konnte nicht gespeichert werden: ${error.message}`);
+      }
+    }
+
     function renderStatus(data) {
       state = { ...state, ...data };
       $('sensorLamp').classList.toggle('on', !!state.sensor);
@@ -389,6 +561,7 @@
       $('screenCoordinates').textContent = point.valid ? `X ${Math.round(point.x * (settings.screenWidth || state.screenWidth))} · Y ${Math.round(point.y * (settings.screenHeight || state.screenHeight))}` : 'X -- · Y --';
       $('screenResolutionReadout').textContent = `${settings.screenWidth || state.screenWidth} × ${settings.screenHeight || state.screenHeight}`;
       $('calibrationTitle').textContent = state.calibrated ? 'Kalibrierung abgeschlossen' : 'Kalibrierung';
+      if (calibrationActive) updateCalibrationOverlay();
       draw();
     }
 
@@ -440,35 +613,34 @@
       } catch (error) { notify(`Fehler: ${error.message}`); }
     });
 
-    $('captureButton').addEventListener('click', async () => {
-      if (calibrationStep < 0) {
-        calibrationStep = 0;
-        $('captureButton').textContent = 'Ecke 1 erfassen';
-        $('calibrationHint').textContent = 'IR-Punkt auf Ecke 1 von 4 richten.';
+    $('captureButton').addEventListener('click', startCalibration);
+    $('overlayCapture').addEventListener('click', captureCalibrationPoint);
+    $('overlayCancel').addEventListener('click', stopCalibration);
+    for (const canvas of [sensorCanvas, screenCanvas]) {
+      canvas.classList.add('calibratable');
+      canvas.addEventListener('pointerdown', beginCalibrationDrag);
+      canvas.addEventListener('pointermove', moveCalibrationDrag);
+      canvas.addEventListener('pointerup', finishCalibrationDrag);
+      canvas.addEventListener('pointercancel', finishCalibrationDrag);
+    }
+    document.addEventListener('keydown', event => {
+      if (!calibrationActive) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        captureCalibrationPoint();
+      } else if (event.key === 'Escape' && !document.fullscreenElement) {
+        stopCalibration();
       }
-      if (!state.point?.valid) { notify('Kein IR-Punkt erkannt'); return; }
-      const [targetX, targetY] = targets[calibrationStep];
-      try {
-        await request('/api/calibrate', 'POST', { index: calibrationStep, targetX, targetY });
-        calibrationStep++;
-        if (calibrationStep >= targets.length) {
-          calibrationStep = -1;
-          const status = await (await request('/api/status')).json();
-          renderStatus(status);
-          notify(status.calibrated ? 'Kalibrierung gespeichert' : 'Kalibrierung unvollständig');
-        } else {
-          $('captureButton').textContent = `Ecke ${calibrationStep + 1} erfassen`;
-          $('calibrationHint').textContent = `IR-Punkt auf Ecke ${calibrationStep + 1} von 4 richten.`;
-          draw();
-        }
-      } catch (error) { notify(`Fehler: ${error.message}`); }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      if (calibrationActive && !document.fullscreenElement) stopCalibration();
     });
 
     $('resetButton').addEventListener('click', async () => {
       try {
         await request('/api/calibration/reset', 'POST', {});
         calibrationStep = -1;
-        $('captureButton').textContent = 'Kalibrieren';
+        $('captureButton').textContent = 'Vollbild kalibrieren';
         $('calibrationHint').textContent = 'Vier projizierte Ecken nacheinander antippen.';
         renderStatus({ calibrated: false });
         notify('Kalibrierung zurückgesetzt');

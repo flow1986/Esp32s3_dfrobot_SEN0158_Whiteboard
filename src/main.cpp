@@ -49,6 +49,7 @@ bool calibrated = false;
 uint8_t calibrationMask = 0;
 bool sensorPresent = false;
 bool hidEnabled = true;
+bool calibrationMode = false;
 bool contactActive = false;
 bool mouseMode = false;
 bool mouseTracking = false;
@@ -385,6 +386,7 @@ void appendLiveData(JsonDocument& document) {
   const bool hasPoint = findPrimaryPoint(primary);
   document["sensor"] = sensorPresent;
   document["hid"] = hidEnabled;
+  document["calibrationMode"] = calibrationMode;
   document["contact"] = contactActive;
   document["mouseMode"] = mouseMode;
   document["calibrated"] = calibrated;
@@ -517,6 +519,52 @@ void handleCalibrationPost() {
               calibrated ? "{\"calibrated\":true}" : "{\"calibrated\":false}");
 }
 
+void handleCalibrationPointPost() {
+  JsonDocument document;
+  if (deserializeJson(document, server.arg("plain"))) {
+    server.send(400, "text/plain", "Invalid JSON");
+    return;
+  }
+  const uint8_t index = document["index"] | 255;
+  if (index >= 4 || !(calibrationMask & (1U << index))) {
+    server.send(409, "text/plain", "Calibration point does not exist");
+    return;
+  }
+  const float sensorX = document["sensorX"] | (calibration[index].sx / kSensorWidth);
+  const float sensorY = document["sensorY"] | (calibration[index].sy / kSensorHeight);
+  const float targetX = document["targetX"] | (calibration[index].tx / screenWidth);
+  const float targetY = document["targetY"] | (calibration[index].ty / screenHeight);
+  if (sensorX < 0 || sensorX > 1 || sensorY < 0 || sensorY > 1 ||
+      targetX < 0 || targetX > 1 || targetY < 0 || targetY > 1) {
+    server.send(400, "text/plain", "Calibration coordinates must be normalized");
+    return;
+  }
+  calibration[index].sx = sensorX * kSensorWidth;
+  calibration[index].sy = sensorY * kSensorHeight;
+  calibration[index].tx = targetX * screenWidth;
+  calibration[index].ty = targetY * screenHeight;
+  calibrated = calibrationMask == 0x0F && solveHomography();
+  saveSettings();
+  server.send(200, "application/json", calibrated ? "{\"calibrated\":true}" : "{\"calibrated\":false}");
+}
+
+void handleCalibrationModePost() {
+  JsonDocument document;
+  if (deserializeJson(document, server.arg("plain"))) {
+    server.send(400, "text/plain", "Invalid JSON");
+    return;
+  }
+  const bool enabled = document["active"] | false;
+  if (enabled && !calibrationMode) {
+    if (contactActive && mouseMode) releaseMouse();
+    else if (contactActive) sendTouch(false, 0, 0);
+    contactActive = false;
+    resetMouseGesture();
+  }
+  calibrationMode = enabled;
+  server.send(200, "application/json", enabled ? "{\"active\":true}" : "{\"active\":false}");
+}
+
 void handleCalibrationReset() {
   calibrated = false;
   calibrationMask = 0;
@@ -578,6 +626,8 @@ void setupWeb() {
   server.on("/api/config", HTTP_GET, handleConfigGet);
   server.on("/api/config", HTTP_POST, handleConfigPost);
   server.on("/api/calibrate", HTTP_POST, handleCalibrationPost);
+  server.on("/api/calibration/point", HTTP_POST, handleCalibrationPointPost);
+  server.on("/api/calibration/mode", HTTP_POST, handleCalibrationModePost);
   server.on("/api/calibration/reset", HTTP_POST, handleCalibrationReset);
   server.on("/api/test", HTTP_POST, handleTouchTest);
   server.on("/api/wifi", HTTP_POST, handleWifiPost);
@@ -646,7 +696,9 @@ void loop() {
         if (calibrated) mapPoint(filteredX, filteredY, mappedX, mappedY);
         mappedX = constrain(mappedX, 0.0f, static_cast<float>(screenWidth));
         mappedY = constrain(mappedY, 0.0f, static_cast<float>(screenHeight));
-        if (hidEnabled && mouseMode) {
+        if (calibrationMode) {
+          contactActive = false;
+        } else if (hidEnabled && mouseMode) {
           updateMouse(true, mappedX, mappedY);
           contactActive = true;
         } else if (hidEnabled) {
