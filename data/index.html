@@ -51,6 +51,10 @@
     .surface-head { min-height: 54px; padding: 13px 17px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
     .surface-head h3 { margin: 0; font-size: 14px; font-weight: 700; }
     .surface-head span { color: var(--muted); font-size: 12px; }
+    .live-views { display: grid; grid-template-columns: 1fr 1fr; }
+    .view-pane + .view-pane { border-left: 1px solid var(--line); }
+    .view-head { display: flex; justify-content: space-between; gap: 8px; padding: 12px 15px 0; font-size: 12px; font-weight: 700; }
+    .view-head span + span { color: var(--muted); font-weight: 400; }
     .plot-wrap { position: relative; background: var(--navy); padding: 14px; }
     canvas { width: 100%; display: block; aspect-ratio: 4 / 3; max-height: 56vh; object-fit: contain; }
     .plot-label { position: absolute; bottom: 21px; left: 22px; color: #c6d7d1; font: 11px/1.3 "Trebuchet MS", sans-serif; }
@@ -96,6 +100,10 @@
       .grid { grid-template-columns: 1fr; }
       canvas { max-height: none; }
     }
+    @media (max-width: 620px) {
+      .live-views { grid-template-columns: 1fr; }
+      .view-pane + .view-pane { border-left: 0; border-top: 1px solid var(--line); }
+    }
     @media (max-width: 540px) {
       .topbar { align-items: flex-start; flex-direction: column; }
       .top-status { justify-content: flex-start; }
@@ -127,11 +135,24 @@
     </div>
     <div class="grid">
       <section class="surface" aria-labelledby="liveTitle">
-        <div class="surface-head"><h3 id="liveTitle">Sensor-Liveansicht</h3><span id="pointReadout">Warte auf IR-Punkt</span></div>
-        <div class="plot-wrap">
-          <canvas id="sensorCanvas" aria-label="Liveposition der vom IR-Sensor erkannten Punkte"></canvas>
-          <div class="plot-label">SEN0158 · Sichtfeld</div>
-          <div class="plot-coords" id="coordinates">X -- · Y --</div>
+        <div class="surface-head"><h3 id="liveTitle">Live-Positionen</h3><span id="pointReadout">Warte auf IR-Punkt</span></div>
+        <div class="live-views">
+          <div class="view-pane">
+            <div class="view-head"><span>Sensorraum</span><span>IR-Erkennung + Kalibrier-Viereck</span></div>
+            <div class="plot-wrap">
+              <canvas id="sensorCanvas" aria-label="Sensorraum mit erkannten Infrarotpunkten und Quellpunkten der Kalibrierung"></canvas>
+              <div class="plot-label">SEN0158 · 1023 × 767</div>
+              <div class="plot-coords" id="sensorCoordinates">X -- · Y --</div>
+            </div>
+          </div>
+          <div class="view-pane">
+            <div class="view-head"><span>Projektionsfläche</span><span id="screenResolutionReadout">1920 × 1080</span></div>
+            <div class="plot-wrap">
+              <canvas id="screenCanvas" aria-label="Projektionsfläche mit transformierter Touchposition und Kalibrierzielen"></canvas>
+              <div class="plot-label">HID-Ziel · Bildschirmkoordinaten</div>
+              <div class="plot-coords" id="screenCoordinates">X -- · Y --</div>
+            </div>
+          </div>
         </div>
         <div class="calibration">
           <div class="calibration-row">
@@ -184,8 +205,10 @@
   <div class="toast" id="toast" role="status"></div>
   <script>
     const $ = (id) => document.getElementById(id);
-    const canvas = $('sensorCanvas');
-    const context = canvas.getContext('2d');
+    const sensorCanvas = $('sensorCanvas');
+    const sensorContext = sensorCanvas.getContext('2d');
+    const screenCanvas = $('screenCanvas');
+    const screenContext = screenCanvas.getContext('2d');
     const targets = [[0.04, 0.04], [0.96, 0.04], [0.96, 0.96], [0.04, 0.96]];
     let state = { blobs: [], point: { valid: false }, sensor: false, hid: false, calibrated: false };
     let calibrationStep = -1;
@@ -207,18 +230,20 @@
     }
 
     function resizeCanvas() {
-      const bounds = canvas.getBoundingClientRect();
       const scale = window.devicePixelRatio || 1;
-      canvas.width = Math.round(bounds.width * scale);
-      canvas.height = Math.round(bounds.height * scale);
-      context.setTransform(scale, 0, 0, scale, 0, 0);
+      for (const [canvas, context] of [[sensorCanvas, sensorContext], [screenCanvas, screenContext]]) {
+        const bounds = canvas.getBoundingClientRect();
+        canvas.width = Math.round(bounds.width * scale);
+        canvas.height = Math.round(bounds.height * scale);
+        context.setTransform(scale, 0, 0, scale, 0, 0);
+      }
       draw();
     }
 
-    function draw() {
+    function drawGrid(canvas, context) {
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
-      if (!width || !height) return;
+      if (!width || !height) return null;
       context.clearRect(0, 0, width, height);
       context.fillStyle = '#152326';
       context.fillRect(0, 0, width, height);
@@ -236,21 +261,114 @@
       context.setLineDash([5, 5]);
       context.strokeRect(1, 1, width - 2, height - 2);
       context.setLineDash([]);
+      return { width, height };
+    }
+
+    function drawCalibrationMarker(context, x, y, index, color) {
+      context.beginPath();
+      context.arc(x, y, 7, 0, Math.PI * 2);
+      context.fillStyle = color;
+      context.fill();
+      context.fillStyle = '#152326';
+      context.font = 'bold 9px sans-serif';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(String(index + 1), x, y + 0.5);
+    }
+
+    function draw() {
+      const sensorSize = drawGrid(sensorCanvas, sensorContext);
+      const screenSize = drawGrid(screenCanvas, screenContext);
+      if (!sensorSize || !screenSize) return;
+
+      const calibration = state.calibration || [];
+      if (calibration.length === 4 && calibration.every(point => point.valid)) {
+        sensorContext.beginPath();
+        calibration.forEach((point, index) => {
+          const x = point.sensorX * sensorSize.width;
+          const y = point.sensorY * sensorSize.height;
+          if (index === 0) sensorContext.moveTo(x, y);
+          else sensorContext.lineTo(x, y);
+        });
+        sensorContext.closePath();
+        sensorContext.fillStyle = 'rgba(83, 183, 148, .09)';
+        sensorContext.fill();
+        sensorContext.strokeStyle = '#69c7a2';
+        sensorContext.lineWidth = 2;
+        sensorContext.stroke();
+      }
+
       for (const blob of state.blobs || []) {
         if (!blob.valid) continue;
-        const x = blob.x * width;
-        const y = blob.y * height;
-        context.beginPath(); context.arc(x, y, 10, 0, Math.PI * 2);
-        context.fillStyle = '#ed745b'; context.fill();
-        context.beginPath(); context.arc(x, y, 18, 0, Math.PI * 2);
-        context.strokeStyle = 'rgba(237,116,91,.38)'; context.lineWidth = 2; context.stroke();
+        const x = blob.x * sensorSize.width;
+        const y = blob.y * sensorSize.height;
+        sensorContext.beginPath(); sensorContext.arc(x, y, 7, 0, Math.PI * 2);
+        sensorContext.fillStyle = '#ed745b'; sensorContext.fill();
+        sensorContext.beginPath(); sensorContext.arc(x, y, 13, 0, Math.PI * 2);
+        sensorContext.strokeStyle = 'rgba(237,116,91,.45)'; sensorContext.lineWidth = 2; sensorContext.stroke();
       }
+
+      for (let index = 0; index < calibration.length; index++) {
+        const point = calibration[index];
+        if (point.valid) drawCalibrationMarker(sensorContext, point.sensorX * sensorSize.width, point.sensorY * sensorSize.height, index, '#f1cf73');
+      }
+
+      const screenWidth = settings.screenWidth || state.screenWidth || 1920;
+      const screenHeight = settings.screenHeight || state.screenHeight || 1080;
+      const availableWidth = screenSize.width - 36;
+      const availableHeight = screenSize.height - 36;
+      const aspect = screenWidth / screenHeight;
+      let targetWidth = availableWidth;
+      let targetHeight = targetWidth / aspect;
+      if (targetHeight > availableHeight) {
+        targetHeight = availableHeight;
+        targetWidth = targetHeight * aspect;
+      }
+      const left = (screenSize.width - targetWidth) / 2;
+      const top = (screenSize.height - targetHeight) / 2;
+      screenContext.fillStyle = '#f2f1eb';
+      screenContext.fillRect(left, top, targetWidth, targetHeight);
+      screenContext.save();
+      screenContext.beginPath();
+      screenContext.rect(left, top, targetWidth, targetHeight);
+      screenContext.clip();
+      screenContext.strokeStyle = 'rgba(23,107,88,.17)';
+      screenContext.lineWidth = 1;
+      for (let index = 1; index < 8; index++) {
+        const x = left + targetWidth * index / 8;
+        screenContext.beginPath(); screenContext.moveTo(x, top); screenContext.lineTo(x, top + targetHeight); screenContext.stroke();
+      }
+      for (let index = 1; index < 6; index++) {
+        const y = top + targetHeight * index / 6;
+        screenContext.beginPath(); screenContext.moveTo(left, y); screenContext.lineTo(left + targetWidth, y); screenContext.stroke();
+      }
+      screenContext.restore();
+      screenContext.strokeStyle = '#176b58';
+      screenContext.lineWidth = 2;
+      screenContext.strokeRect(left, top, targetWidth, targetHeight);
+
+      for (let index = 0; index < calibration.length; index++) {
+        const point = calibration[index];
+        if (point.valid) drawCalibrationMarker(screenContext, left + point.targetX * targetWidth, top + point.targetY * targetHeight, index, '#69c7a2');
+      }
+
+      const point = state.point || {};
+      if (point.valid) {
+        const x = left + point.x * targetWidth;
+        const y = top + point.y * targetHeight;
+        screenContext.beginPath(); screenContext.arc(x, y, 8, 0, Math.PI * 2);
+        screenContext.fillStyle = '#ed745b'; screenContext.fill();
+        screenContext.strokeStyle = '#fffefa'; screenContext.lineWidth = 2; screenContext.stroke();
+      }
+
       if (calibrationStep >= 0) {
         const [x, y] = targets[calibrationStep];
-        context.strokeStyle = '#f1cf73'; context.lineWidth = 2;
-        context.beginPath(); context.arc(x * width, y * height, 12, 0, Math.PI * 2); context.stroke();
-        context.beginPath(); context.moveTo(x * width - 20, y * height); context.lineTo(x * width + 20, y * height); context.stroke();
-        context.beginPath(); context.moveTo(x * width, y * height - 20); context.lineTo(x * width, y * height + 20); context.stroke();
+        const targetX = left + x * targetWidth;
+        const targetY = top + y * targetHeight;
+        screenContext.strokeStyle = '#d4543e'; screenContext.lineWidth = 2;
+        screenContext.beginPath(); screenContext.arc(targetX, targetY, 11, 0, Math.PI * 2); screenContext.stroke();
+        screenContext.beginPath(); screenContext.moveTo(targetX - 18, targetY); screenContext.lineTo(targetX + 18, targetY); screenContext.stroke();
+        screenContext.beginPath(); screenContext.moveTo(targetX, targetY - 18); screenContext.lineTo(targetX, targetY + 18); screenContext.stroke();
       }
     }
 
@@ -262,10 +380,14 @@
       $('usbState').textContent = state.hid ? (state.mouseMode ? 'USB Maus aktiv' : 'USB Touch aktiv') : 'USB HID aus';
       $('wifiLamp').classList.toggle('on', !!data.staConnected);
       $('wifiState').textContent = data.staConnected ? 'WLAN verbunden' : 'Access Point aktiv';
-      if (data.staConnected) $('wifiDetails').textContent = `${data.staSsid || ''} · ${data.staIp || ''} · AP ${data.apIp || ''}`;
+      $('wifiDetails').textContent = data.staConnected
+        ? `${data.staSsid || ''} · ${data.staIp || ''} · AP ${data.apIp || ''}`
+        : `Access Point IR-Whiteboard · ${data.apIp || '192.168.4.1'} bleibt aktiv.`;
       const point = state.point || {};
       $('pointReadout').textContent = point.valid ? `IR-Punkt erkannt · Größe ${point.size}` : 'Warte auf IR-Punkt';
-      $('coordinates').textContent = point.valid ? `X ${Math.round((point.x || 0) * settings.screenWidth)} · Y ${Math.round((point.y || 0) * settings.screenHeight)}` : 'X -- · Y --';
+      $('sensorCoordinates').textContent = point.valid ? `X ${Math.round(point.sensorX)} · Y ${Math.round(point.sensorY)}` : 'X -- · Y --';
+      $('screenCoordinates').textContent = point.valid ? `X ${Math.round(point.x * (settings.screenWidth || state.screenWidth))} · Y ${Math.round(point.y * (settings.screenHeight || state.screenHeight))}` : 'X -- · Y --';
+      $('screenResolutionReadout').textContent = `${settings.screenWidth || state.screenWidth} × ${settings.screenHeight || state.screenHeight}`;
       $('calibrationTitle').textContent = state.calibrated ? 'Kalibrierung abgeschlossen' : 'Kalibrierung';
       draw();
     }

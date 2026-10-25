@@ -29,4 +29,4 @@ for name in bootloader partitions boot_app0 firmware littlefs; do
   cp "$source" "$ROOT/$name.bin"
 done
 
-printf 'Build %s exportiert. Web-Flasher-Dateien liegen im Projekt-Root.\n' "$STAMP"
+printf 'Build %s exportiert. Flash-Dateien liegen im Projekt-Root.\n' "$STAMP"

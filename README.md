@@ -12,6 +12,8 @@ Neue PlatformIO-Firmware für das DFRobot SEN0158 IR-Positioning-Modul. Der Sens
 - Web-Liveansicht, Sensorstatus, Touch-Test und konfigurierbare Filter.
 - Einstellbare Bildschirmauflösung und persistente Konfiguration im ESP32-NVS.
 
+Die Liveansicht zeigt zwei Koordinatenräume gleichzeitig: links die erkannten IR-Punkte im Sensorfeld mit dem aus vier Messpunkten gebildeten Kalibrier-Viereck; rechts das Bildschirm-Rechteck mit den vier Zielpunkten und der aktuell homographisch transformierten HID-Position. Die Einstellungen, die vier Kalibrierpaare, der HID-Schalter und WLAN-Zugangsdaten bleiben nach Neustarts im NVS gespeichert.
+
 ## Hardware und Pins
 
 Zielboard: Waveshare ESP32-S3-Zero mit 4 MB Flash. Das Projekt enthält ein eigenes PlatformIO-Profil für genau dieses Ziel. Andere ESP32-S3-Boards brauchen ein passendes Boardprofil und eine Partitionstabelle für deren Flashgröße. Der USB-Anschluss muss native USB-OTG-Verbindung ermöglichen.
@@ -28,8 +30,8 @@ Die I2C-Adresse ist `0x58`, die Busgeschwindigkeit 100 kHz. IR-LED/Pen benötigt
 ## Inbetriebnahme
 
 1. Installiere PlatformIO Core und Python 3.
-2. Baue Firmware, Dateisystem und Web-Flasher-Artefakte mit `bash scripts/build-release.sh`.
-3. Flash per ESP Web Tools über die Flasher-Seite in `docs/index.html` (gehostet über GitHub Pages) oder manuell mit den Dateien `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin` und `littlefs.bin`.
+2. Erzeuge Firmware, Dateisystem und Binärdateien mit `bash scripts/build-release.sh`.
+3. Flash die fünf Binärdateien manuell mit den unten angegebenen Adressen.
 4. Verbinde den Rechner/das Android-Gerät per USB-Datenkabel mit dem ESP32-S3. Der S3 muss native USB-OTG unterstützen; USB-UART-Adapter allein kann kein HID bereitstellen.
 5. Verbinde dich mit WLAN `IR-Whiteboard`, Passwort `whiteboard`, und öffne `http://192.168.4.1`.
 6. Stelle den IR-Sensor so auf, dass die gesamte Projektionsfläche sichtbar ist. Stelle im Webinterface die Bildschirmauflösung ein und erfasse die vier projizierten Ecken mit dem IR-Pen.
@@ -52,9 +54,9 @@ Der Access Point bleibt im AP+STA-Modus aktiv. Unter „WLAN verbinden“ gespei
 
 Kalibrierung: die angezeigten vier Eckziele der Reihe nach mit dem IR-Pen markieren und jeweils „Ecke erfassen“ drücken. Bei großer Sensor-Beamer-Entfernung den Sensor mittig und möglichst parallel zur Projektionsfläche ausrichten. Die Sensorreichweite hängt von IR-LED-Leistung, Optik, Winkel und Umgebungslicht ab; eine feste Maximaldistanz kann nicht garantiert werden. Eine engere IR-Optik am Sensor und eine kräftige, fokussierte IR-LED am Pen verbessern üblicherweise die Reichweite. Nach Änderung von Sensorposition, Zoom oder Projektionsfläche neu kalibrieren.
 
-## Web-Flasher-Dateien
+## Flash-Dateien und Adressen
 
-Jeder Aufruf des Release-Build-Skripts aktualisiert die festen Dateien im Projekt-Root und erzeugt zusätzlich einen UTC-Zeitstempel-Satz (`*-YYYYMMDD-HHMMSS-UTC.bin`). Die verwendeten Flash-Adressen stehen in `docs/manifest.json`:
+Jeder Aufruf des Release-Build-Skripts aktualisiert die festen Dateien im Projekt-Root und erzeugt zusätzlich einen UTC-Zeitstempel-Satz (`*-YYYYMMDD-HHMMSS-UTC.bin`).
 
 | Datei | Adresse | Zweck |
 | --- | ---: | --- |
@@ -63,8 +65,6 @@ Jeder Aufruf des Release-Build-Skripts aktualisiert die festen Dateien im Projek
 | `boot_app0.bin` | `0xE000` | Arduino-OTA-Metadatenbereich |
 | `firmware.bin` | `0x10000` | Programmcode |
 | `littlefs.bin` | `0x300000` | Weboberfläche im LittleFS-Dateisystem (1 MB) |
-
-Für GitHub Pages muss die Veröffentlichungsquelle einmalig auf den Ordner `docs` des `main`-Branches gestellt werden. Die Web-Serial-Flasher-Seite erfordert Chrome/Edge über HTTPS und löscht beim Erstflashen den bestehenden Gerätespeicher.
 
 ## Build
 

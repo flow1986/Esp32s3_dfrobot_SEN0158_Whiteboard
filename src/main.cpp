@@ -375,10 +375,9 @@ void updateMouse(bool detected, float x, float y) {
   mouseDevice.report(buttons, dx, dy);
 }
 
-void sendStatus() {
+void appendLiveData(JsonDocument& document) {
   IrPoint primary;
   const bool hasPoint = findPrimaryPoint(primary);
-  JsonDocument document;
   document["sensor"] = sensorPresent;
   document["hid"] = hidEnabled;
   document["contact"] = contactActive;
@@ -386,15 +385,18 @@ void sendStatus() {
   document["calibrated"] = calibrated;
   document["screenWidth"] = screenWidth;
   document["screenHeight"] = screenHeight;
+  document["calibrationMask"] = calibrationMask;
   document["apIp"] = WiFi.softAPIP().toString();
   document["staConnected"] = WiFi.status() == WL_CONNECTED;
   document["staIp"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
   document["staSsid"] = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "";
   document["point"]["valid"] = hasPoint;
   if (hasPoint) {
-    float x = primary.x;
-    float y = primary.y;
-    if (calibrated) mapPoint(primary.x, primary.y, x, y);
+    const float sensorX = primary.x;
+    const float sensorY = primary.y;
+    float x = filterInitialized ? filteredX : sensorX;
+    float y = filterInitialized ? filteredY : sensorY;
+    if (calibrated) mapPoint(x, y, x, y);
     document["point"]["sensorX"] = primary.x;
     document["point"]["sensorY"] = primary.y;
     document["point"]["x"] = x / screenWidth;
@@ -408,6 +410,20 @@ void sendStatus() {
     blob["x"] = static_cast<float>(point.x) / kSensorWidth;
     blob["y"] = static_cast<float>(point.y) / kSensorHeight;
   }
+  JsonArray calibrationData = document["calibration"].to<JsonArray>();
+  for (uint8_t i = 0; i < 4; ++i) {
+    JsonObject item = calibrationData.add<JsonObject>();
+    item["valid"] = calibrationMask & (1U << i);
+    item["sensorX"] = calibration[i].sx / kSensorWidth;
+    item["sensorY"] = calibration[i].sy / kSensorHeight;
+    item["targetX"] = calibration[i].tx / screenWidth;
+    item["targetY"] = calibration[i].ty / screenHeight;
+  }
+}
+
+void sendStatus() {
+  JsonDocument document;
+  appendLiveData(document);
   String output;
   serializeJson(document, output);
   socketServer.broadcastTXT(output);
@@ -415,16 +431,7 @@ void sendStatus() {
 
 void handleStatus() {
   JsonDocument document;
-  document["sensor"] = sensorPresent;
-  document["hid"] = hidEnabled;
-  document["mouseMode"] = mouseMode;
-  document["calibrated"] = calibrated;
-  document["screenWidth"] = screenWidth;
-  document["screenHeight"] = screenHeight;
-  document["apIp"] = WiFi.softAPIP().toString();
-  document["staConnected"] = WiFi.status() == WL_CONNECTED;
-  document["staIp"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
-  document["staSsid"] = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "";
+  appendLiveData(document);
   String output;
   serializeJson(document, output);
   server.send(200, "application/json", output);
