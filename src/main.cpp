@@ -399,13 +399,13 @@ void appendLiveData(JsonDocument& document) {
   document["staSsid"] = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "";
   document["point"]["valid"] = hasPoint;
   if (hasPoint) {
-    const float sensorX = primary.x;
-    const float sensorY = primary.y;
-    float x = filterInitialized ? filteredX : sensorX;
-    float y = filterInitialized ? filteredY : sensorY;
+    const float sensorX = filterInitialized ? filteredX : primary.x;
+    const float sensorY = filterInitialized ? filteredY : primary.y;
+    float x = sensorX;
+    float y = sensorY;
     if (calibrated) mapPoint(x, y, x, y);
-    document["point"]["sensorX"] = primary.x;
-    document["point"]["sensorY"] = primary.y;
+    document["point"]["sensorX"] = sensorX;
+    document["point"]["sensorY"] = sensorY;
     document["point"]["x"] = x / screenWidth;
     document["point"]["y"] = y / screenHeight;
     document["point"]["size"] = primary.size;

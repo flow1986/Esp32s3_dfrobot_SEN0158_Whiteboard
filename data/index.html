@@ -109,6 +109,8 @@
     .calibration-panel p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
     .calibration-panel-actions { display: flex; flex: 0 0 auto; gap: 7px; }
     .calibration-panel .button { white-space: nowrap; }
+    .dwell-track { height: 3px; margin-top: 10px; overflow: hidden; background: #d8ddda; border-radius: 3px; }
+    .dwell-track span { display: block; width: 0; height: 100%; background: var(--green); transition: width .08s linear; }
     .calibration-corner { position: absolute; color: #c6d7d1; font: 12px ui-monospace, monospace; }
     .calibration-corner.top-left { top: 5%; left: 5%; }
     .calibration-corner.top-right { top: 5%; right: 5%; }
@@ -222,9 +224,8 @@
   </main>
   <div class="calibration-overlay" id="calibrationOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
     <div class="calibration-panel">
-      <div><strong id="overlayTitle">Kalibrierung · Ecke 1 von 4</strong><p id="overlayHint">IR-Punkt auf das Ziel richten und „Ecke erfassen“ drücken oder Enter betätigen.</p></div>
+      <div><strong id="overlayTitle">Kalibrierung · Ecke 1 von 4</strong><p id="overlayHint">IR-Punkt auf das Ziel richten und stabil halten.</p><div class="dwell-track"><span id="dwellProgress"></span></div></div>
       <div class="calibration-panel-actions">
-        <button class="button primary" id="overlayCapture" type="button">Ecke erfassen</button>
         <button class="button" id="overlayCancel" type="button">Beenden</button>
       </div>
     </div>
@@ -246,9 +247,15 @@
     let calibrationStep = -1;
     let calibrationActive = false;
     let calibrationBusy = false;
+    let stableSince = 0;
+    let stablePoint = null;
+    let lastCapturedPoint = null;
     let draggedCalibration = null;
     let settings = {};
     let toastTimer;
+    const captureDwellMs = 2200;
+    const stableRadius = 18;
+    const nextCornerMovement = 80;
 
     function notify(message) {
       const toast = $('toast');
@@ -419,15 +426,17 @@
       $('calibrationTarget').style.top = `${y * 100}%`;
       $('overlayTitle').textContent = `Kalibrierung · Ecke ${calibrationStep + 1} von 4`;
       $('overlayHint').textContent = state.point?.valid
-        ? 'IR-Punkt ausgerichtet. Zum Speichern auf „Ecke erfassen“ klicken oder Enter drücken.'
-        : 'IR-Punkt auf das Ziel richten. Auf „Ecke erfassen“ klicken oder Enter drücken.';
-      $('overlayCapture').textContent = `Ecke ${calibrationStep + 1} erfassen`;
+        ? 'IR-Punkt erkannt. Für die automatische Aufnahme ruhig auf dem Ziel halten.'
+        : 'IR-Punkt auf das Ziel richten.';
     }
 
     async function startCalibration() {
       if (!state.sensor) { notify('SEN0158 ist nicht erreichbar'); return; }
       calibrationStep = 0;
       calibrationActive = true;
+      stableSince = 0;
+      stablePoint = null;
+      lastCapturedPoint = null;
       $('calibrationOverlay').hidden = false;
       document.body.classList.add('calibrating');
       updateCalibrationOverlay();
@@ -461,15 +470,58 @@
       catch (error) { notify(`HID-Pause konnte nicht beendet werden: ${error.message}`); }
       $('calibrationHint').textContent = 'Vier projizierte Ecken nacheinander erfassen. Marker in den Vorschauen lassen sich ziehen.';
       $('captureButton').textContent = 'Vollbild kalibrieren';
+      $('dwellProgress').style.width = '0%';
     }
 
-    async function captureCalibrationPoint() {
+    function updateAutoCalibration() {
+      if (!calibrationActive || calibrationBusy) return;
+      const point = state.point;
+      if (!point?.valid) {
+        stableSince = 0;
+        stablePoint = null;
+        $('dwellProgress').style.width = '0%';
+        $('overlayHint').textContent = 'IR-Punkt auf Ecke richten; warte auf Erkennung.';
+        return;
+      }
+
+      const current = { x: point.sensorX, y: point.sensorY };
+      if (lastCapturedPoint) {
+        const moved = Math.hypot(current.x - lastCapturedPoint.x, current.y - lastCapturedPoint.y);
+        if (moved < nextCornerMovement) {
+          stableSince = 0;
+          stablePoint = null;
+          $('dwellProgress').style.width = '0%';
+          $('overlayHint').textContent = `Punkt zur Ecke ${calibrationStep + 1} bewegen.`;
+          return;
+        }
+        lastCapturedPoint = null;
+      }
+
+      const drift = stablePoint ? Math.hypot(current.x - stablePoint.x, current.y - stablePoint.y) : Infinity;
+      if (drift > stableRadius) {
+        stablePoint = current;
+        stableSince = Date.now();
+      }
+      const elapsed = Date.now() - stableSince;
+      const progress = Math.min(1, elapsed / captureDwellMs);
+      $('dwellProgress').style.width = `${progress * 100}%`;
+      $('overlayHint').textContent = progress >= 1
+        ? 'Ecke erkannt; speichere Kalibrierpunkt.'
+        : `Punkt ruhig halten · ${((captureDwellMs - elapsed) / 1000).toFixed(1)} s`;
+      if (elapsed >= captureDwellMs) captureCalibrationPoint(current);
+    }
+
+    async function captureCalibrationPoint(capturedPoint) {
       if (!calibrationActive || calibrationBusy) return;
       if (!state.point?.valid) { notify('Kein IR-Punkt erkannt'); return; }
       calibrationBusy = true;
       const [targetX, targetY] = targets[calibrationStep];
       try {
         await request('/api/calibrate', 'POST', { index: calibrationStep, targetX, targetY });
+        lastCapturedPoint = capturedPoint;
+        stablePoint = null;
+        stableSince = 0;
+        $('dwellProgress').style.width = '0%';
         const status = await (await request('/api/status')).json();
         renderStatus(status);
         calibrationStep++;
@@ -561,7 +613,10 @@
       $('screenCoordinates').textContent = point.valid ? `X ${Math.round(point.x * (settings.screenWidth || state.screenWidth))} · Y ${Math.round(point.y * (settings.screenHeight || state.screenHeight))}` : 'X -- · Y --';
       $('screenResolutionReadout').textContent = `${settings.screenWidth || state.screenWidth} × ${settings.screenHeight || state.screenHeight}`;
       $('calibrationTitle').textContent = state.calibrated ? 'Kalibrierung abgeschlossen' : 'Kalibrierung';
-      if (calibrationActive) updateCalibrationOverlay();
+      if (calibrationActive) {
+        updateCalibrationOverlay();
+        updateAutoCalibration();
+      }
       draw();
     }
 
@@ -614,7 +669,6 @@
     });
 
     $('captureButton').addEventListener('click', startCalibration);
-    $('overlayCapture').addEventListener('click', captureCalibrationPoint);
     $('overlayCancel').addEventListener('click', stopCalibration);
     for (const canvas of [sensorCanvas, screenCanvas]) {
       canvas.classList.add('calibratable');
@@ -625,10 +679,7 @@
     }
     document.addEventListener('keydown', event => {
       if (!calibrationActive) return;
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        captureCalibrationPoint();
-      } else if (event.key === 'Escape' && !document.fullscreenElement) {
+      if (event.key === 'Escape' && !document.fullscreenElement) {
         stopCalibration();
       }
     });
