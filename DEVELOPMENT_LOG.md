@@ -8,7 +8,7 @@ Stand 2026-10-25. Dieses Log hält die wichtigsten Entscheidungen fest, damit di
 - Offizielle Referenzen: https://wiki.dfrobot.com/sen0158/docs/20468 (Arduino-Init, Pointer `0x36`, 16-Byte-Read/Offsets), https://wiki.dfrobot.com/sen0158 (3.3/5 V, 0-3 m, Sichtwinkel/Pinout), https://github.com/DFRobot/I2C_Addresses (7-Bit-Adresse `0x58`).
 - Zielboard: Waveshare ESP32-S3-Zero, 4 MB Flash, native USB-OTG für HID.
 - USB ist Composite CDC + HID (`ARDUINO_USB_MODE=0`, `ARDUINO_USB_CDC_ON_BOOT=1`); serielle Startmeldungen über den nativen USB-COM-Port bei 115200 Baud.
-- SDA GPIO 5, SCL GPIO 6, I2C-Adresse `0x58`, Bus 100 kHz.
+- SDA GPIO 5, SCL GPIO 6, I2C-Adresse `0x58`, Bus 400 kHz.
 - PlatformIO-Profil: `waveshare_s3_zero_4mb`, Plattform Espressif32 6.9.0, Arduino.
 - Build: `bash scripts/build-release.sh`; bettet `data/index.html` in die Firmware ein und hinterlässt ausschließlich vier gemeinsam zeitgestempelte Binärdateien im Projekt-Root. Statische Aliasdateien und ältere Zeitstempelsätze werden entfernt.
 - Flash-Adressen: Bootloader `0x0000`, Partitionstabelle `0x8000`, boot_app0 `0xE000`, Firmware `0x10000`. Kein separates Dateisystem-Image.
@@ -24,7 +24,9 @@ Stand 2026-10-25. Dieses Log hält die wichtigsten Entscheidungen fest, damit di
 - Weboberfläche wird zur Buildzeit als PROGMEM-Header in die Firmware eingebettet; LittleFS ist nicht erforderlich.
 - Liveansicht hat zwei Koordinatenräume: Sensorfeld mit IR-Blobs und Kalibrier-Viereck; Bildschirm-Rechteck mit Zielpunkten und transformierter HID-Position.
 - Kein Web-Flasher im Repository. Nur die fünf aktuellen Timestamp-Binärdateien und deren Flash-Offsets werden benötigt.
-- Initialisierung und I2C-Read entsprechen nun der offiziellen DFRobot-Beispielreihenfolge; Empfindlichkeitsblöcke bleiben projektspezifische Presets aus der alten Firmware und sind nicht durch DFRobot-Beispielcode bestätigt.
+- Initialisierung und I2C-Read entsprechen der offiziellen DFRobot-Beispielreihenfolge; Empfindlichkeitsstufe 6 ist das Preset aus Johnny Lees WiimoteWhiteboard (verifiziert im Quellcode), Stufen 1-5 stammen aus der alten Firmware (nicht bestätigt).
+- Tracking läuft in einem eigenen 200-Hz-FreeRTOS-Task (Kern 1) getrennt von Webserver/WebSocket: identische Frames werden verworfen, Mittelwert über N Bilder (Standard 4), Haltezeit für Punktaussetzer (Standard 80 ms), Punktwahl bleibt am zuletzt verfolgten Blob, bis zu 20 I2C-Lesefehler werden toleriert. Altwerte werden per `cfgVer` einmalig auf diese Standards migriert.
+- WiimoteWhiteboard (Referenz) hat selbst keine Haltezeit und nutzt dieselbe 4-Punkt-Homographie ohne Linsenkorrektur; die Haltezeit ist eine eigene Ergänzung.
 
 ## Noch zu prüfen
 

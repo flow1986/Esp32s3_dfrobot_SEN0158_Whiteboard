@@ -207,8 +207,8 @@
           <h3>Signal</h3>
           <div class="control"><label for="sensitivity">Sensorreichweite <output id="sensitivityValue">6</output></label><input id="sensitivity" type="range" min="1" max="6" step="1"></div>
           <div class="control"><label for="minSize">Mindestgröße IR-Punkt <output id="minSizeValue">2</output></label><input id="minSize" type="range" min="0" max="15" step="1"></div>
-          <div class="control"><label for="alpha">Glättung <output id="alphaValue">0,35</output></label><input id="alpha" type="range" min="0.05" max="0.95" step="0.05"></div>
-          <label class="switch-row" for="smoothToggle"><span>Bewegung glätten</span><input class="switch" id="smoothToggle" type="checkbox"></label>
+          <div class="control"><label for="smoothWindow">Glättung (Mittelung) <output id="smoothWindowValue">4</output></label><input id="smoothWindow" type="range" min="1" max="16" step="1"></div>
+          <div class="control"><label for="holdMs">Aussetzer überbrücken <output id="holdMsValue">80 ms</output></label><input id="holdMs" type="range" min="0" max="500" step="10"></div>
         </section>
         <section class="section">
           <h3>WLAN verbinden</h3>
@@ -630,10 +630,11 @@
       $('minSizeValue').value = settings.minBlobSize;
       $('sensitivity').value = settings.sensitivity;
       $('sensitivityValue').value = settings.sensitivity;
-      $('alpha').value = settings.alpha;
-      $('alphaValue').value = Number(settings.alpha).toLocaleString('de-DE', { minimumFractionDigits: 2 });
+      $('smoothWindow').value = settings.smoothWindow;
+      $('smoothWindowValue').value = settings.smoothWindow;
+      $('holdMs').value = settings.holdMs;
+      $('holdMsValue').value = `${settings.holdMs} ms`;
       $('hidToggle').checked = settings.hid;
-      $('smoothToggle').checked = settings.smoothing;
       document.querySelector(`input[name="inputMode"][value="${settings.mouseMode ? 'mouse' : 'touch'}"]`).checked = true;
       $('longPress').value = settings.longPressMs;
       $('longPressValue').value = `${settings.longPressMs} ms`;
@@ -654,13 +655,15 @@
         ? 'Relative Mauszeiger: kurzer Kontakt klickt, Bewegung zieht, langer Kontakt löst Rechtsklick aus.'
         : 'Absolute Bildschirmposition, ideal fürs Whiteboard und Touch-Gesten des Betriebssystems.';
     }));
-    $('alpha').addEventListener('input', () => $('alphaValue').value = Number($('alpha').value).toLocaleString('de-DE', { minimumFractionDigits: 2 }));
+    $('smoothWindow').addEventListener('input', () => $('smoothWindowValue').value = $('smoothWindow').value);
+    $('holdMs').addEventListener('input', () => $('holdMsValue').value = `${$('holdMs').value} ms`);
     $('saveButton').addEventListener('click', async () => {
       try {
         const values = {
           screenWidth: Number($('screenWidth').value), screenHeight: Number($('screenHeight').value),
-          minBlobSize: Number($('minSize').value), sensitivity: Number($('sensitivity').value), alpha: Number($('alpha').value),
-          hid: $('hidToggle').checked, smoothing: $('smoothToggle').checked,
+          minBlobSize: Number($('minSize').value), sensitivity: Number($('sensitivity').value),
+          smoothWindow: Number($('smoothWindow').value), holdMs: Number($('holdMs').value),
+          hid: $('hidToggle').checked,
           mouseMode: document.querySelector('input[name="inputMode"]:checked').value === 'mouse',
           longPressMs: Number($('longPress').value)
         };

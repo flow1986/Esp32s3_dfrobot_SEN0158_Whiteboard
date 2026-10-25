@@ -19,7 +19,10 @@ constexpr uint16_t kSensorWidth = 1023;
 constexpr uint16_t kSensorHeight = 767;
 constexpr uint8_t kSdaPin = 5;
 constexpr uint8_t kSclPin = 6;
-constexpr uint32_t kI2cFrequency = 100000;
+constexpr uint32_t kI2cFrequency = 400000;
+constexpr uint8_t kMaxSmoothWindow = 16;
+constexpr float kTrackJumpPx = 150.0f;
+constexpr uint8_t kMaxReadFailures = 20;
 constexpr char kApSsid[] = "IR-Whiteboard";
 constexpr char kApPassword[] = "whiteboard";
 
@@ -62,15 +65,28 @@ float mouseStartX = 0;
 float mouseStartY = 0;
 float mouseLastX = 0;
 float mouseLastY = 0;
-bool smoothingEnabled = true;
-float smoothing = 0.35f;
-uint8_t minBlobSize = 2;
+uint8_t smoothWindow = 4;
+uint16_t holdMs = 80;
+uint8_t minBlobSize = 1;
 uint8_t sensitivityLevel = 6;
 uint16_t screenWidth = 1920;
 uint16_t screenHeight = 1080;
 float filteredX = 0;
 float filteredY = 0;
 bool filterInitialized = false;
+bool frameChanged = false;
+volatile bool sensitivityDirty = false;
+bool trackActive = false;
+bool trackedValid = false;
+IrPoint trackedPoint;
+float trackX = 0;
+float trackY = 0;
+uint32_t lastSeenAt = 0;
+float smoothBufferX[kMaxSmoothWindow];
+float smoothBufferY[kMaxSmoothWindow];
+uint8_t smoothIndex = 0;
+uint8_t smoothCount = 0;
+portMUX_TYPE homographyLock = portMUX_INITIALIZER_UNLOCKED;
 String stationSsid;
 String stationPassword;
 
@@ -161,17 +177,23 @@ bool writeRegister(uint8_t reg, uint8_t value) {
 }
 
 bool writeSensitivity() {
-  static const uint8_t levels[6][11] = {
-      {0x02, 0, 0, 0x71, 0x01, 0, 0x40, 0, 0x55, 0, 0},
-      {0x02, 0, 0, 0x71, 0x01, 0, 0x55, 0, 0x63, 0, 0},
-      {0x02, 0, 0, 0x71, 0x01, 0, 0x5A, 0, 0x6A, 0, 0},
-      {0x02, 0, 0, 0x71, 0x01, 0, 0x64, 0, 0xFE, 0, 0},
-      {0x02, 0, 0, 0x71, 0x01, 0, 0x96, 0, 0xFE, 0, 0},
-      {0x02, 0, 0, 0x71, 0x01, 0, 0xAA, 0, 0x64, 0, 0}};
+  // Stufen 1-5 stammen aus dem Altprojekt; Stufe 6 ist das Preset aus Johnny Lees WiimoteWhiteboard.
+  static const uint8_t block1[6][9] = {
+      {0x02, 0, 0, 0x71, 0x01, 0, 0x40, 0, 0x55},
+      {0x02, 0, 0, 0x71, 0x01, 0, 0x55, 0, 0x63},
+      {0x02, 0, 0, 0x71, 0x01, 0, 0x5A, 0, 0x6A},
+      {0x02, 0, 0, 0x71, 0x01, 0, 0x64, 0, 0xFE},
+      {0x02, 0, 0, 0x71, 0x01, 0, 0x96, 0, 0xFE},
+      {0x00, 0, 0, 0x00, 0x00, 0, 0x90, 0, 0x41}};
+  static const uint8_t block2[2] = {0x40, 0x00};
   Wire.beginTransmission(kIrAddress);
   Wire.write(0x00);
-  Wire.write(levels[constrain(sensitivityLevel, 1, 6) - 1], sizeof(levels[0]));
-  return Wire.endTransmission() == 0;
+  Wire.write(block1[constrain(sensitivityLevel, 1, 6) - 1], sizeof(block1[0]));
+  const bool first = Wire.endTransmission() == 0;
+  Wire.beginTransmission(kIrAddress);
+  Wire.write(0x1A);
+  Wire.write(block2, sizeof(block2));
+  return first && Wire.endTransmission() == 0;
 }
 
 bool initializeSensor() {
@@ -179,15 +201,9 @@ bool initializeSensor() {
   delay(10);
   ok &= writeRegister(0x30, 0x08);
   delay(10);
-  ok &= writeRegister(0x06, 0x90);
-  delay(10);
-  ok &= writeRegister(0x08, 0xC0);
-  delay(10);
-  ok &= writeRegister(0x1A, 0x40);
+  ok &= writeSensitivity();
   delay(10);
   ok &= writeRegister(0x33, 0x33);
-  delay(10);
-  ok &= writeSensitivity();
   delay(100);
   return ok;
 }
@@ -201,6 +217,9 @@ bool readSensor() {
   }
   uint8_t raw[16];
   for (uint8_t& byte : raw) byte = Wire.read();
+  static uint8_t lastRaw[16];
+  frameChanged = memcmp(raw, lastRaw, sizeof(raw)) != 0;
+  memcpy(lastRaw, raw, sizeof(raw));
   IrPoint decoded[4];
   constexpr uint8_t offsets[] = {1, 4, 7, 10};
   for (uint8_t i = 0; i < 4; ++i) {
@@ -260,27 +279,39 @@ bool solveHomography() {
       for (uint8_t j = column; j < 9; ++j) matrix[row][j] -= factor * matrix[column][j];
     }
   }
-  for (uint8_t i = 0; i < 8; ++i) homography[i] = matrix[i][8];
-  homography[8] = 1;
+  float result[9];
+  for (uint8_t i = 0; i < 8; ++i) result[i] = static_cast<float>(matrix[i][8]);
+  result[8] = 1;
+  portENTER_CRITICAL(&homographyLock);
+  memcpy(homography, result, sizeof(result));
+  portEXIT_CRITICAL(&homographyLock);
   return true;
 }
 
 bool mapPoint(float x, float y, float& mappedX, float& mappedY) {
-  const float denominator = homography[6] * x + homography[7] * y + homography[8];
+  float h[9];
+  portENTER_CRITICAL(&homographyLock);
+  memcpy(h, homography, sizeof(h));
+  portEXIT_CRITICAL(&homographyLock);
+  const float denominator = h[6] * x + h[7] * y + h[8];
   if (fabsf(denominator) < 1e-6f) return false;
-  mappedX = (homography[0] * x + homography[1] * y + homography[2]) / denominator;
-  mappedY = (homography[3] * x + homography[4] * y + homography[5]) / denominator;
+  mappedX = (h[0] * x + h[1] * y + h[2]) / denominator;
+  mappedY = (h[3] * x + h[4] * y + h[5]) / denominator;
   return true;
 }
+
+void saveSettings();
 
 void loadSettings() {
   preferences.begin("whiteboard", true);
   screenWidth = preferences.getUShort("width", 1920);
   screenHeight = preferences.getUShort("height", 1080);
-  minBlobSize = preferences.getUChar("minSize", 2);
-  sensitivityLevel = preferences.getUChar("sensitivity", 6);
-  smoothingEnabled = preferences.getBool("smooth", true);
-  smoothing = preferences.getFloat("alpha", 0.35f);
+  // Ältere Firmware kannte diese Tracking-Werte nicht; sie werden einmalig auf die neuen Standards gesetzt.
+  const bool migrate = preferences.getUChar("cfgVer", 0) < 2;
+  minBlobSize = migrate ? 1 : preferences.getUChar("minSize", 1);
+  sensitivityLevel = migrate ? 6 : preferences.getUChar("sensitivity", 6);
+  smoothWindow = migrate ? 4 : preferences.getUChar("window", 4);
+  holdMs = migrate ? 80 : preferences.getUShort("hold", 80);
   hidEnabled = preferences.getBool("hid", true);
   mouseMode = preferences.getBool("mouseMode", false);
   longPressMs = preferences.getUShort("longPress", 650);
@@ -291,6 +322,7 @@ void loadSettings() {
   preferences.getBytes("cal", calibration, sizeof(calibration));
   preferences.end();
   if (calibrated) calibrated = calibrationMask == 0x0F && solveHomography();
+  if (migrate) saveSettings();
 }
 
 void saveSettings() {
@@ -299,8 +331,9 @@ void saveSettings() {
   preferences.putUShort("height", screenHeight);
   preferences.putUChar("minSize", minBlobSize);
   preferences.putUChar("sensitivity", sensitivityLevel);
-  preferences.putBool("smooth", smoothingEnabled);
-  preferences.putFloat("alpha", smoothing);
+  preferences.putUChar("cfgVer", 2);
+  preferences.putUChar("window", smoothWindow);
+  preferences.putUShort("hold", holdMs);
   preferences.putBool("hid", hidEnabled);
   preferences.putBool("mouseMode", mouseMode);
   preferences.putUShort("longPress", longPressMs);
@@ -313,12 +346,8 @@ void saveSettings() {
 }
 
 bool findPrimaryPoint(IrPoint& point) {
-  int selected = -1;
-  for (uint8_t i = 0; i < 4; ++i) {
-    if (points[i].valid && (selected < 0 || points[i].size > points[selected].size)) selected = i;
-  }
-  if (selected < 0) return false;
-  point = points[selected];
+  if (!trackedValid) return false;
+  point = trackedPoint;
   return true;
 }
 
@@ -392,7 +421,6 @@ void appendLiveData(JsonDocument& document) {
   document["mouseMode"] = mouseMode;
   document["calibrated"] = calibrated;
   document["apStarted"] = apStarted;
-  document["apStarted"] = apStarted;
   document["screenWidth"] = screenWidth;
   document["screenHeight"] = screenHeight;
   document["calibrationMask"] = calibrationMask;
@@ -453,8 +481,8 @@ void handleConfigGet() {
   document["screenHeight"] = screenHeight;
   document["minBlobSize"] = minBlobSize;
   document["sensitivity"] = sensitivityLevel;
-  document["smoothing"] = smoothingEnabled;
-  document["alpha"] = smoothing;
+  document["smoothWindow"] = smoothWindow;
+  document["holdMs"] = holdMs;
   document["hid"] = hidEnabled;
   document["mouseMode"] = mouseMode;
   document["longPressMs"] = longPressMs;
@@ -476,10 +504,10 @@ void handleConfigPost() {
   const uint8_t requestedSensitivity = constrain(document["sensitivity"] | sensitivityLevel, 1, 6);
   if (requestedSensitivity != sensitivityLevel) {
     sensitivityLevel = requestedSensitivity;
-    if (sensorPresent) writeSensitivity();
+    sensitivityDirty = true;
   }
-  smoothingEnabled = document["smoothing"] | smoothingEnabled;
-  smoothing = constrain(document["alpha"] | smoothing, 0.05f, 0.95f);
+  smoothWindow = constrain(document["smoothWindow"] | smoothWindow, 1, kMaxSmoothWindow);
+  holdMs = constrain(document["holdMs"] | holdMs, 0, 500);
   const bool requestedHid = document["hid"] | hidEnabled;
   if (hidEnabled && !requestedHid) {
     if (mouseMode) releaseMouse();
@@ -511,8 +539,8 @@ void handleCalibrationPost() {
     server.send(409, "text/plain", "No IR point detected");
     return;
   }
-  calibration[index].sx = point.x;
-  calibration[index].sy = point.y;
+  calibration[index].sx = filterInitialized ? filteredX : point.x;
+  calibration[index].sy = filterInitialized ? filteredY : point.y;
   calibration[index].tx = static_cast<float>(document["targetX"] | 0.0f) * screenWidth;
   calibration[index].ty = static_cast<float>(document["targetY"] | 0.0f) * screenHeight;
   calibrationMask |= 1U << index;
@@ -607,6 +635,119 @@ void handleWifiPost() {
   WiFi.begin(stationSsid.c_str(), stationPassword.c_str());
 }
 
+void pushSample(float x, float y) {
+  smoothBufferX[smoothIndex] = x;
+  smoothBufferY[smoothIndex] = y;
+  smoothIndex = (smoothIndex + 1) % kMaxSmoothWindow;
+  if (smoothCount < kMaxSmoothWindow) ++smoothCount;
+  const uint8_t window = smoothWindow < 1 ? 1 : (smoothWindow > kMaxSmoothWindow ? kMaxSmoothWindow : smoothWindow);
+  const uint8_t samples = smoothCount < window ? smoothCount : window;
+  float sumX = 0;
+  float sumY = 0;
+  for (uint8_t i = 0; i < samples; ++i) {
+    const uint8_t index = (smoothIndex + kMaxSmoothWindow - 1 - i) % kMaxSmoothWindow;
+    sumX += smoothBufferX[index];
+    sumY += smoothBufferY[index];
+  }
+  filteredX = sumX / samples;
+  filteredY = sumY / samples;
+  filterInitialized = true;
+}
+
+// Bei laufendem Kontakt zaehlt nur der Blob nahe der letzten Position; sonst der groesste.
+void selectTrackedPoint() {
+  int selected = -1;
+  if (trackActive) {
+    float best = kTrackJumpPx * kTrackJumpPx;
+    for (uint8_t i = 0; i < 4; ++i) {
+      if (!points[i].valid) continue;
+      const float dx = points[i].x - trackX;
+      const float dy = points[i].y - trackY;
+      const float distance = dx * dx + dy * dy;
+      if (distance <= best) {
+        best = distance;
+        selected = i;
+      }
+    }
+  } else {
+    for (uint8_t i = 0; i < 4; ++i) {
+      if (points[i].valid && (selected < 0 || points[i].size > points[selected].size)) selected = i;
+    }
+  }
+  trackedValid = selected >= 0;
+  if (trackedValid) {
+    trackedPoint = points[selected];
+    trackX = trackedPoint.x;
+    trackY = trackedPoint.y;
+  }
+}
+
+void endContact() {
+  if (mouseMode) updateMouse(false, 0, 0);
+  else if (contactActive) sendTouch(false, 0, 0);
+  contactActive = false;
+  trackActive = false;
+  filterInitialized = false;
+  smoothCount = 0;
+}
+
+void trackStep(uint32_t now) {
+  selectTrackedPoint();
+  if (trackedValid) {
+    if (!trackActive) smoothCount = 0;
+    trackActive = true;
+    lastSeenAt = now;
+    if (frameChanged || !filterInitialized) pushSample(trackedPoint.x, trackedPoint.y);
+    float mappedX = filteredX;
+    float mappedY = filteredY;
+    if (calibrated) mapPoint(filteredX, filteredY, mappedX, mappedY);
+    mappedX = constrain(mappedX, 0.0f, static_cast<float>(screenWidth));
+    mappedY = constrain(mappedY, 0.0f, static_cast<float>(screenHeight));
+    if (calibrationMode || !hidEnabled) {
+      contactActive = false;
+    } else if (mouseMode) {
+      updateMouse(true, mappedX, mappedY);
+      contactActive = true;
+    } else if (frameChanged || !contactActive) {
+      sendTouch(true, mappedX, mappedY);
+      contactActive = true;
+    }
+  } else if (trackActive && now - lastSeenAt > holdMs) {
+    endContact();
+  }
+}
+
+void sensorTask(void*) {
+  TickType_t lastWake = xTaskGetTickCount();
+  uint32_t lastRetry = 0;
+  uint8_t failures = 0;
+  for (;;) {
+    const uint32_t now = millis();
+    if (!sensorPresent) {
+      if (now - lastRetry >= 5000) {
+        lastRetry = now;
+        failures = 0;
+        sensorPresent = initializeSensor();
+      }
+    } else {
+      if (sensitivityDirty) {
+        sensitivityDirty = false;
+        writeSensitivity();
+      }
+      if (readSensor()) {
+        failures = 0;
+        trackStep(now);
+      } else if (++failures >= kMaxReadFailures) {
+        sensorPresent = false;
+        memset(points, 0, sizeof(points));
+        trackedValid = false;
+        endContact();
+      }
+    }
+    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(5));
+  }
+}
+
 void setupNetwork() {
   WiFi.setSleep(false);
   const bool apStaMode = WiFi.mode(WIFI_AP_STA);
@@ -661,72 +802,16 @@ void setup() {
   USB.begin();
   Serial.printf("IR Whiteboard ready: AP=%s IP=%s sensor=%s\n", kApSsid,
                 WiFi.softAPIP().toString().c_str(), sensorPresent ? "ok" : "not-found");
+  xTaskCreatePinnedToCore(sensorTask, "sensor", 6144, nullptr, 3, nullptr, 1);
 }
 
 void loop() {
-  static uint32_t lastRead = 0;
   static uint32_t lastBroadcast = 0;
-  static uint32_t lastSensorRetry = 0;
-  const uint32_t now = millis();
   dnsServer.processNextRequest();
   server.handleClient();
   socketServer.loop();
 
-  if (!sensorPresent && now - lastSensorRetry >= 5000) {
-    lastSensorRetry = now;
-    sensorPresent = initializeSensor();
-  }
-
-  if (now - lastRead >= 8) {
-    lastRead = now;
-    if (!readSensor()) {
-      sensorPresent = false;
-      memset(points, 0, sizeof(points));
-      if (mouseMode) releaseMouse();
-      else if (contactActive) sendTouch(false, 0, 0);
-      contactActive = false;
-      filterInitialized = false;
-    } else {
-      sensorPresent = true;
-      IrPoint point;
-      const bool detected = findPrimaryPoint(point);
-      if (detected) {
-        if (!filterInitialized) {
-          filteredX = point.x;
-          filteredY = point.y;
-          filterInitialized = true;
-        } else if (smoothingEnabled) {
-          filteredX += smoothing * (point.x - filteredX);
-          filteredY += smoothing * (point.y - filteredY);
-        } else {
-          filteredX = point.x;
-          filteredY = point.y;
-        }
-        float mappedX = filteredX;
-        float mappedY = filteredY;
-        if (calibrated) mapPoint(filteredX, filteredY, mappedX, mappedY);
-        mappedX = constrain(mappedX, 0.0f, static_cast<float>(screenWidth));
-        mappedY = constrain(mappedY, 0.0f, static_cast<float>(screenHeight));
-        if (calibrationMode) {
-          contactActive = false;
-        } else if (hidEnabled && mouseMode) {
-          updateMouse(true, mappedX, mappedY);
-          contactActive = true;
-        } else if (hidEnabled) {
-          sendTouch(true, mappedX, mappedY);
-          contactActive = true;
-        } else {
-          contactActive = false;
-        }
-      } else {
-        filterInitialized = false;
-        if (mouseMode) updateMouse(false, 0, 0);
-        else if (contactActive) sendTouch(false, 0, 0);
-        contactActive = false;
-      }
-    }
-  }
-
+  const uint32_t now = millis();
   if (now - lastBroadcast >= 50) {
     lastBroadcast = now;
     sendStatus();

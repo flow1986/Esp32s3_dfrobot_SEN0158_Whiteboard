@@ -25,7 +25,7 @@ Zielboard: Waveshare ESP32-S3-Zero mit 4 MB Flash. Das Projekt enthält ein eige
 | SDA | GPIO 5 |
 | SCL | GPIO 6 |
 
-Die 7-Bit-I²C-Adresse ist `0x58` (DFRobot-Beispiel: `0xB0 >> 1`), die Busgeschwindigkeit 100 kHz. Das offizielle Beispiel setzt Register `0x30`, `0x06`, `0x08`, `0x1A` und `0x33`, setzt den Datenzeiger auf `0x36` und liest 16 Bytes. Für die Koordinaten werden die Offsets `1/2/3`, `4/5/6`, `7/8/9` und `10/11/12` verwendet. Der Sketch nutzt zusätzlich zur DFRobot-Basisinitialisierung die sechs Empfindlichkeits-Presets aus dem alten Projekt; diese Presets sind nicht in DFRobots Beispielcode dokumentiert.
+Die 7-Bit-I²C-Adresse ist `0x58` (DFRobot-Beispiel: `0xB0 >> 1`), die Busgeschwindigkeit 400 kHz (bei Aussetzern in `kI2cFrequency` auf 100000 zurücksetzen). Das offizielle Beispiel setzt Register `0x30`, `0x06`, `0x08`, `0x1A` und `0x33`, setzt den Datenzeiger auf `0x36` und liest 16 Bytes. Für die Koordinaten werden die Offsets `1/2/3`, `4/5/6`, `7/8/9` und `10/11/12` verwendet. Empfindlichkeitsstufe 6 (Standard) entspricht dem „super sensitive“-Preset aus Johnny Lees [WiimoteWhiteboard](https://github.com/juergs/WiimoteWhiteboard) (Block 1: `00 00 00 00 00 00 90 00 41`, Block 2: `40 00`); die Stufen 1–5 stammen aus dem alten Projekt und sind nicht durch DFRobot dokumentiert.
 
 Quellen: [DFRobot SEN0158-Wiki und Arduino-Beispiel](https://wiki.dfrobot.com/sen0158/docs/20468), [SEN0158-Spezifikationen und Pinout](https://wiki.dfrobot.com/sen0158), [DFRobot I²C-Adressenliste](https://github.com/DFRobot/I2C_Addresses). DFRobot nennt 3,3 V/44 mA oder 5 V/48 mA, 0–3 m Erfassungsabstand sowie 33° horizontal und 23° vertikal. Für den ESP32-S3 ist die 3,3-V-Versorgung die vorsichtige Wahl; 5-V-I²C-Pegel nicht direkt an ESP32-GPIOs anschließen. IR-LED/Pen benötigt eine eigene passende Versorgung. Sensor und Projektionsfläche müssen sich im Sichtfeld befinden; direkte Sonne und andere starke IR-Quellen vermeiden. Das AP-Standardpasswort `whiteboard` ist für die Ersteinrichtung gedacht; ändere es vor einem Einsatz in gemeinsam genutzten Netzen.
 
@@ -47,10 +47,10 @@ Der Access Point bleibt im AP+STA-Modus aktiv. Unter „WLAN verbinden“ gespei
 | Wert | Bedeutung |
 | --- | --- |
 | Bildschirmbreite/-höhe | Logische Touchscreen-Größe. Möglichst passend zur Auflösung des Projektors und der Windows-/Android-Anzeige setzen. |
-| Mindestgröße IR-Punkt | Verwirft kleinere SEN0158-Blobs. Höher reduziert Störungen, kann schwache oder weit entfernte LEDs verlieren. |
-| Sensorreichweite | SEN0158-Empfindlichkeitsstufe 1 bis 6. Stufe 6 ist am empfindlichsten und hilft bei größeren Abständen; geringere Stufen vermeiden Störungen bei nahen/starken IR-Punkten. |
-| Glättung | EMA-Anteil der neuen Position. Niedrig = ruhiger, aber mehr Verzögerung; hoch = direkter, aber unruhiger. |
-| Bewegung glätten | Schaltet den EMA-Filter ein/aus. |
+| Mindestgröße IR-Punkt | Verwirft kleinere SEN0158-Blobs (Standard 1). Höher reduziert Störungen, kann schwache oder weit entfernte LEDs verlieren. |
+| Sensorreichweite | Empfindlichkeitsstufe 1 bis 6. Stufe 6 (Standard) ist das Wiimote-Whiteboard-Preset; bei Reflexen oder aufgespaltenen Punkten niedrigere Stufen testen. |
+| Glättung (Mittelung) | Mittelwert über die letzten N Sensorbilder (1 = aus, Standard 4), wie in WiimoteWhiteboard. Höher = ruhiger, aber mehr Verzögerung. |
+| Aussetzer überbrücken | Wie lange ein verschwundener IR-Punkt als weiter gedrückt gilt (Standard 80 ms). Verhindert Strichunterbrechungen; zu hoch lässt den Touch nach dem Absetzen nachhängen. |
 | USB-Touch senden | Aktiviert/deaktiviert Touch-Berichte, ohne Webkonfiguration abzuschalten. |
 | Eingabemodus | Touchscreen nutzt absolute Koordinaten; Mausmodus bewegt den relativen Cursor und bietet den konfigurierbaren Long-Press-Rechtsklick. |
 | Rechtsklick ab | Haltezeit im Mausmodus, bevor ein Rechtsklick ausgegeben wird (350-2000 ms). |
