@@ -175,20 +175,25 @@ bool writeSensitivity() {
 bool initializeSensor() {
   bool ok = writeRegister(0x30, 0x01);
   delay(10);
-  writeRegister(0x06, 0x90);
-  writeRegister(0x08, 0xC0);
-  writeRegister(0x1A, 0x40);
-  writeRegister(0x33, 0x33);
-  ok &= writeSensitivity();
   ok &= writeRegister(0x30, 0x08);
-  delay(50);
+  delay(10);
+  ok &= writeRegister(0x06, 0x90);
+  delay(10);
+  ok &= writeRegister(0x08, 0xC0);
+  delay(10);
+  ok &= writeRegister(0x1A, 0x40);
+  delay(10);
+  ok &= writeRegister(0x33, 0x33);
+  delay(10);
+  ok &= writeSensitivity();
+  delay(100);
   return ok;
 }
 
 bool readSensor() {
   Wire.beginTransmission(kIrAddress);
   Wire.write(kIrPointer);
-  if (Wire.endTransmission(false) != 0 ||
+  if (Wire.endTransmission() != 0 ||
       Wire.requestFrom(kIrAddress, static_cast<uint8_t>(16)) != 16) {
     return false;
   }

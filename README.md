@@ -20,12 +20,14 @@ Zielboard: Waveshare ESP32-S3-Zero mit 4 MB Flash. Das Projekt enthält ein eige
 
 | SEN0158 | ESP32-S3 |
 | --- | --- |
-| VCC | 3V3 (Modulversorgung nach DFRobot-Datenblatt prüfen) |
+| VCC | 3V3 für den ESP32-S3 (DFRobot spezifiziert 3,3 V oder 5 V) |
 | GND | GND |
 | SDA | GPIO 5 |
 | SCL | GPIO 6 |
 
-Die I2C-Adresse ist `0x58`, die Busgeschwindigkeit 100 kHz. IR-LED/Pen benötigt eine eigene passende Versorgung. Sensor und Projektionsfläche müssen sich im Sichtfeld befinden; direkte Sonne und andere starke IR-Quellen vermeiden. Das AP-Standardpasswort `whiteboard` ist für die Ersteinrichtung gedacht; ändere es vor einem Einsatz in gemeinsam genutzten Netzen.
+Die 7-Bit-I²C-Adresse ist `0x58` (DFRobot-Beispiel: `0xB0 >> 1`), die Busgeschwindigkeit 100 kHz. Das offizielle Beispiel setzt Register `0x30`, `0x06`, `0x08`, `0x1A` und `0x33`, setzt den Datenzeiger auf `0x36` und liest 16 Bytes. Für die Koordinaten werden die Offsets `1/2/3`, `4/5/6`, `7/8/9` und `10/11/12` verwendet. Der Sketch nutzt zusätzlich zur DFRobot-Basisinitialisierung die sechs Empfindlichkeits-Presets aus dem alten Projekt; diese Presets sind nicht in DFRobots Beispielcode dokumentiert.
+
+Quellen: [DFRobot SEN0158-Wiki und Arduino-Beispiel](https://wiki.dfrobot.com/sen0158/docs/20468), [SEN0158-Spezifikationen und Pinout](https://wiki.dfrobot.com/sen0158), [DFRobot I²C-Adressenliste](https://github.com/DFRobot/I2C_Addresses). DFRobot nennt 3,3 V/44 mA oder 5 V/48 mA, 0–3 m Erfassungsabstand sowie 33° horizontal und 23° vertikal. Für den ESP32-S3 ist die 3,3-V-Versorgung die vorsichtige Wahl; 5-V-I²C-Pegel nicht direkt an ESP32-GPIOs anschließen. IR-LED/Pen benötigt eine eigene passende Versorgung. Sensor und Projektionsfläche müssen sich im Sichtfeld befinden; direkte Sonne und andere starke IR-Quellen vermeiden. Das AP-Standardpasswort `whiteboard` ist für die Ersteinrichtung gedacht; ändere es vor einem Einsatz in gemeinsam genutzten Netzen.
 
 ## Inbetriebnahme
 
