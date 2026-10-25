@@ -48,6 +48,7 @@ float homography[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 bool calibrated = false;
 uint8_t calibrationMask = 0;
 bool sensorPresent = false;
+bool apStarted = false;
 bool hidEnabled = true;
 bool calibrationMode = false;
 bool contactActive = false;
@@ -390,6 +391,8 @@ void appendLiveData(JsonDocument& document) {
   document["contact"] = contactActive;
   document["mouseMode"] = mouseMode;
   document["calibrated"] = calibrated;
+  document["apStarted"] = apStarted;
+  document["apStarted"] = apStarted;
   document["screenWidth"] = screenWidth;
   document["screenHeight"] = screenHeight;
   document["calibrationMask"] = calibrationMask;
@@ -605,11 +608,26 @@ void handleWifiPost() {
 }
 
 void setupNetwork() {
-  WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
-  WiFi.softAP(kApSsid, kApPassword);
-  dnsServer.start(53, "*", WiFi.softAPIP());
-  if (stationSsid.length()) WiFi.begin(stationSsid.c_str(), stationPassword.c_str());
+  const bool apStaMode = WiFi.mode(WIFI_AP_STA);
+  delay(100);
+  apStarted = apStaMode && WiFi.softAP(kApSsid, kApPassword, 1, false, 4);
+  if (!apStarted) {
+    WiFi.mode(WIFI_OFF);
+    delay(100);
+    WiFi.mode(WIFI_AP);
+    delay(100);
+    apStarted = WiFi.softAP(kApSsid, kApPassword, 1, false, 4);
+  }
+  if (apStarted) {
+    dnsServer.start(53, "*", WiFi.softAPIP());
+    Serial.printf("AP started: SSID=%s IP=%s\n", kApSsid, WiFi.softAPIP().toString().c_str());
+    if (stationSsid.length() && WiFi.getMode() == WIFI_AP_STA) {
+      WiFi.begin(stationSsid.c_str(), stationPassword.c_str());
+    }
+  } else {
+    Serial.printf("AP FAILED: SSID=%s\n", kApSsid);
+  }
 }
 
 void setupWeb() {
@@ -634,15 +652,15 @@ void setupWeb() {
 void setup() {
   Serial.begin(115200);
   loadSettings();
+  setupNetwork();
   Wire.begin(kSdaPin, kSclPin, kI2cFrequency);
   Wire.setTimeOut(25);
   sensorPresent = initializeSensor();
-  setupNetwork();
   setupWeb();
   USB.begin();
   touchDevice.begin();
-  Serial.printf("IR Whiteboard AP: %s / %s at %s\n", kApSsid, kApPassword,
-                WiFi.softAPIP().toString().c_str());
+  Serial.printf("IR Whiteboard ready: AP=%s IP=%s sensor=%s\n", kApSsid,
+                WiFi.softAPIP().toString().c_str(), sensorPresent ? "ok" : "not-found");
 }
 
 void loop() {

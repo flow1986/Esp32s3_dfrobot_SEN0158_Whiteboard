@@ -602,8 +602,10 @@
       $('sensorState').textContent = state.sensor ? 'SEN0158 bereit' : 'Sensor nicht erreichbar';
       $('usbLamp').classList.toggle('on', !!state.hid);
       $('usbState').textContent = state.hid ? (state.mouseMode ? 'USB Maus aktiv' : 'USB Touch aktiv') : 'USB HID aus';
-      $('wifiLamp').classList.toggle('on', !!data.staConnected);
-      $('wifiState').textContent = data.staConnected ? 'WLAN verbunden' : 'Access Point aktiv';
+      $('wifiLamp').classList.toggle('on', !!data.staConnected || !!data.apStarted);
+      $('wifiState').textContent = data.staConnected
+        ? 'WLAN verbunden'
+        : data.apStarted ? 'AP IR-Whiteboard aktiv' : 'AP-Start fehlgeschlagen';
       $('wifiDetails').textContent = data.staConnected
         ? `${data.staSsid || ''} · ${data.staIp || ''} · AP ${data.apIp || ''}`
         : `Access Point IR-Whiteboard · ${data.apIp || '192.168.4.1'} bleibt aktiv.`;

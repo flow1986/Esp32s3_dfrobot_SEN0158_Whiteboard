@@ -19,6 +19,7 @@ Stand 2026-10-25. Dieses Log hält die wichtigsten Entscheidungen fest, damit di
 - Vier-Punkt-Homographie. Quell- und Zielpunkte, HID-Modus, Auflösung, Glättung, Blob-Mindestgröße, Empfindlichkeit, WLAN-Zugangsdaten und Long-Press-Zeit liegen im NVS.
 - Kalibrierung läuft im Browser-Vollbild, pausiert HID und erfasst jede Ecke automatisch nach 2,2 Sekunden stabiler Erkennung. Zwischen Ecken wird eine deutliche Bewegung verlangt. Quell- und Zielmarker sind in den zwei Live-Canvases verschiebbar; beim Loslassen wird die Homographie neu berechnet und persistiert.
 - AP `IR-Whiteboard` mit Passwort `whiteboard` bleibt im AP+STA-Betrieb verfügbar; Web-UI unter `http://192.168.4.1`.
+- AP wird vor I2C/Sensorinitialisierung gestartet, Startfehler geprüft und es gibt einen AP-only-Fallback. Status liefert `apStarted`.
 - Weboberfläche wird zur Buildzeit als PROGMEM-Header in die Firmware eingebettet; LittleFS ist nicht erforderlich.
 - Liveansicht hat zwei Koordinatenräume: Sensorfeld mit IR-Blobs und Kalibrier-Viereck; Bildschirm-Rechteck mit Zielpunkten und transformierter HID-Position.
 - Kein Web-Flasher im Repository. Nur die fünf aktuellen Timestamp-Binärdateien und deren Flash-Offsets werden benötigt.
