@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <DNSServer.h>
-#include <LittleFS.h>
 #include <Preferences.h>
 #include <USB.h>
 #include <USBHID.h>
@@ -11,6 +10,7 @@
 #include <Wire.h>
 #include <math.h>
 #include <string.h>
+#include "web_ui.h"
 
 namespace {
 constexpr uint8_t kIrAddress = 0x58;
@@ -614,13 +614,7 @@ void setupNetwork() {
 
 void setupWeb() {
   server.on("/", HTTP_GET, []() {
-    File page = LittleFS.open("/index.html", "r");
-    if (!page) {
-      server.send(500, "text/plain", "Web UI missing; flash LittleFS image");
-      return;
-    }
-    server.streamFile(page, "text/html");
-    page.close();
+    server.send_P(200, "text/html; charset=utf-8", WEB_UI_HTML);
   });
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/config", HTTP_GET, handleConfigGet);
@@ -643,7 +637,6 @@ void setup() {
   Wire.begin(kSdaPin, kSclPin, kI2cFrequency);
   Wire.setTimeOut(25);
   sensorPresent = initializeSensor();
-  LittleFS.begin(true);
   setupNetwork();
   setupWeb();
   USB.begin();

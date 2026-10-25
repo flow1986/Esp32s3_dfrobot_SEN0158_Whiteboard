@@ -9,8 +9,8 @@ Stand 2026-10-25. Dieses Log hält die wichtigsten Entscheidungen fest, damit di
 - Zielboard: Waveshare ESP32-S3-Zero, 4 MB Flash, native USB-OTG für HID.
 - SDA GPIO 5, SCL GPIO 6, I2C-Adresse `0x58`, Bus 100 kHz.
 - PlatformIO-Profil: `waveshare_s3_zero_4mb`, Plattform Espressif32 6.9.0, Arduino.
-- Build: `bash scripts/build-release.sh`; erstellt Firmware und LittleFS und hinterlässt ausschließlich fünf gemeinsam zeitgestempelte Binärdateien im Projekt-Root. Statische Aliasdateien und ältere Zeitstempelsätze werden entfernt.
-- Flash-Adressen: Bootloader `0x0000`, Partitionstabelle `0x8000`, boot_app0 `0xE000`, Firmware `0x10000`, LittleFS `0x300000` (1 MB).
+- Build: `bash scripts/build-release.sh`; bettet `data/index.html` in die Firmware ein und hinterlässt ausschließlich vier gemeinsam zeitgestempelte Binärdateien im Projekt-Root. Statische Aliasdateien und ältere Zeitstempelsätze werden entfernt.
+- Flash-Adressen: Bootloader `0x0000`, Partitionstabelle `0x8000`, boot_app0 `0xE000`, Firmware `0x10000`. Kein separates Dateisystem-Image.
 
 ## Implementiert
 
@@ -19,6 +19,7 @@ Stand 2026-10-25. Dieses Log hält die wichtigsten Entscheidungen fest, damit di
 - Vier-Punkt-Homographie. Quell- und Zielpunkte, HID-Modus, Auflösung, Glättung, Blob-Mindestgröße, Empfindlichkeit, WLAN-Zugangsdaten und Long-Press-Zeit liegen im NVS.
 - Kalibrierung läuft im Browser-Vollbild, pausiert HID und erfasst jede Ecke automatisch nach 2,2 Sekunden stabiler Erkennung. Zwischen Ecken wird eine deutliche Bewegung verlangt. Quell- und Zielmarker sind in den zwei Live-Canvases verschiebbar; beim Loslassen wird die Homographie neu berechnet und persistiert.
 - AP `IR-Whiteboard` mit Passwort `whiteboard` bleibt im AP+STA-Betrieb verfügbar; Web-UI unter `http://192.168.4.1`.
+- Weboberfläche wird zur Buildzeit als PROGMEM-Header in die Firmware eingebettet; LittleFS ist nicht erforderlich.
 - Liveansicht hat zwei Koordinatenräume: Sensorfeld mit IR-Blobs und Kalibrier-Viereck; Bildschirm-Rechteck mit Zielpunkten und transformierter HID-Position.
 - Kein Web-Flasher im Repository. Nur die fünf aktuellen Timestamp-Binärdateien und deren Flash-Offsets werden benötigt.
 - Initialisierung und I2C-Read entsprechen nun der offiziellen DFRobot-Beispielreihenfolge; Empfindlichkeitsblöcke bleiben projektspezifische Presets aus der alten Firmware und sind nicht durch DFRobot-Beispielcode bestätigt.

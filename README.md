@@ -32,8 +32,8 @@ Quellen: [DFRobot SEN0158-Wiki und Arduino-Beispiel](https://wiki.dfrobot.com/se
 ## Inbetriebnahme
 
 1. Installiere PlatformIO Core und Python 3.
-2. Erzeuge Firmware, Dateisystem und Binärdateien mit `bash scripts/build-release.sh`.
-3. Flash die fünf Binärdateien manuell mit den unten angegebenen Adressen.
+2. Erzeuge Firmware und Binärdateien mit `bash scripts/build-release.sh`. Die Weboberfläche wird beim Kompilieren in die Firmware eingebettet.
+3. Flash die vier Binärdateien manuell mit den unten angegebenen Adressen.
 4. Verbinde den Rechner/das Android-Gerät per USB-Datenkabel mit dem ESP32-S3. Der S3 muss native USB-OTG unterstützen; USB-UART-Adapter allein kann kein HID bereitstellen.
 5. Verbinde dich mit WLAN `IR-Whiteboard`, Passwort `whiteboard`, und öffne `http://192.168.4.1`.
 6. Stelle den IR-Sensor so auf, dass die gesamte Projektionsfläche sichtbar ist. Stelle im Webinterface die Bildschirmauflösung ein und erfasse die vier projizierten Ecken mit dem IR-Pen.
@@ -60,15 +60,14 @@ Bei großer Sensor-Beamer-Entfernung den Sensor mittig und möglichst parallel z
 
 ## Flash-Dateien und Adressen
 
-Jeder Aufruf des Release-Build-Skripts erzeugt im Projekt-Root fünf Dateien mit gemeinsamem UTC-Zeitstempel, zum Beispiel `firmware-20261025-130000-UTC.bin`. Statische Aliasdateien und frühere Builds werden entfernt; es bleibt nur der aktuellste, zeitlich erkennbare Binärsatz.
+Jeder Aufruf des Release-Build-Skripts erzeugt im Projekt-Root vier Dateien mit gemeinsamem UTC-Zeitstempel, zum Beispiel `firmware-20261025-130000-UTC.bin`. Statische Aliasdateien und frühere Builds werden entfernt; es bleibt nur der aktuellste, zeitlich erkennbare Binärsatz. Die Weboberfläche steckt direkt in `firmware-*.bin`; ein Dateisystem-Image wird nicht benötigt.
 
 | Datei | Adresse | Zweck |
 | --- | ---: | --- |
 | `bootloader-<timestamp>.bin` | `0x0000` | ESP32-S3-Startloader |
-| `partitions-<timestamp>.bin` | `0x8000` | Partitionstabelle (NVS, OTA-Slot, LittleFS) |
+| `partitions-<timestamp>.bin` | `0x8000` | Partitionstabelle (NVS und Firmware) |
 | `boot_app0-<timestamp>.bin` | `0xE000` | Arduino-OTA-Metadatenbereich |
 | `firmware-<timestamp>.bin` | `0x10000` | Programmcode |
-| `littlefs-<timestamp>.bin` | `0x300000` | Weboberfläche im LittleFS-Dateisystem (1 MB) |
 
 ## Build
 

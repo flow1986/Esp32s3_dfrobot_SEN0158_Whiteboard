@@ -8,7 +8,6 @@ FRAMEWORK="$HOME/.platformio/packages/framework-arduinoespressif32"
 STAMP="$(date -u +%Y%m%d-%H%M%S-UTC)"
 
 cd "$ROOT"
-"$PIO" run -t buildfs
 "$PIO" run
 
 declare -A SOURCES=(
@@ -16,10 +15,9 @@ declare -A SOURCES=(
   [partitions]="$BUILD/partitions.bin"
   [boot_app0]="$FRAMEWORK/tools/partitions/boot_app0.bin"
   [firmware]="$BUILD/firmware.bin"
-  [littlefs]="$BUILD/littlefs.bin"
 )
 
-for name in bootloader partitions boot_app0 firmware littlefs; do
+for name in bootloader partitions boot_app0 firmware; do
   source="${SOURCES[$name]}"
   if [[ ! -s "$source" ]]; then
     printf 'Build-Artefakt fehlt: %s\n' "$source" >&2
@@ -27,7 +25,7 @@ for name in bootloader partitions boot_app0 firmware littlefs; do
   fi
 done
 
-for name in bootloader partitions boot_app0 firmware littlefs; do
+for name in bootloader partitions boot_app0 firmware; do
   cp "${SOURCES[$name]}" "$ROOT/$name-$STAMP.bin"
 done
 
